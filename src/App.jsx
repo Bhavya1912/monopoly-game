@@ -2,6 +2,62 @@ import { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get, onValue, update } from "firebase/database";
 
+// ── Animations (injected once) ────────────────────────────────────────────────
+const ANIM_STYLE = `
+  @keyframes diceShake {
+    0%   { transform: rotate(0deg) scale(1); }
+    15%  { transform: rotate(-20deg) scale(1.2); }
+    30%  { transform: rotate(20deg) scale(1.3); }
+    45%  { transform: rotate(-15deg) scale(1.2); }
+    60%  { transform: rotate(15deg) scale(1.3); }
+    75%  { transform: rotate(-10deg) scale(1.2); }
+    90%  { transform: rotate(5deg) scale(1.1); }
+    100% { transform: rotate(0deg) scale(1); }
+  }
+  @keyframes diceLand {
+    0%   { transform: scale(1.3); box-shadow: 0 0 20px rgba(255,215,0,0.8); }
+    50%  { transform: scale(0.9); }
+    100% { transform: scale(1);   box-shadow: 2px 2px 5px rgba(0,0,0,0.3); }
+  }
+  @keyframes tokenBounce {
+    0%   { transform: translateY(0px) scale(1); }
+    30%  { transform: translateY(-8px) scale(1.3); }
+    60%  { transform: translateY(-4px) scale(1.15); }
+    80%  { transform: translateY(-6px) scale(1.2); }
+    100% { transform: translateY(0px) scale(1); }
+  }
+  @keyframes tokenStep {
+    0%   { transform: scale(1) translateY(0); filter: brightness(1); }
+    50%  { transform: scale(1.4) translateY(-6px); filter: brightness(1.4) drop-shadow(0 0 6px gold); }
+    100% { transform: scale(1) translateY(0); filter: brightness(1); }
+  }
+  @keyframes cellFlash {
+    0%   { background: inherit; }
+    40%  { background: rgba(255,215,0,0.5); }
+    100% { background: inherit; }
+  }
+  @keyframes moneyPop {
+    0%   { opacity: 0; transform: translateY(0) scale(0.5); }
+    40%  { opacity: 1; transform: translateY(-20px) scale(1.2); }
+    100% { opacity: 0; transform: translateY(-40px) scale(1); }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .dice-rolling {
+    animation: diceShake 0.6s ease-in-out infinite;
+  }
+  .dice-landed {
+    animation: diceLand 0.4s ease-out forwards;
+  }
+  .token-moving {
+    animation: tokenStep 0.35s ease-in-out;
+  }
+  .token-arrived {
+    animation: tokenBounce 0.5s ease-out forwards;
+  }
+`;
+
 const firebaseConfig = {
   apiKey: "AIzaSyCzd09dkugQ8DMNO-3xKEl-DDzpKS66iFw",
   authDomain: "monopoly-game-1a36c.firebaseapp.com",
@@ -15,7 +71,6 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 
-// ── Constants ─────────────────────────────────────────────────────────────────
 const SPACES = [
   { id: 0,  name: "GO",                 type: "go",          color: null,      price: null },
   { id: 1,  name: "Mediterranean Ave",  type: "property",    color: "#8B4513", price: 60,  rent: [2,10,30,90,160,250],       houseCost: 50 },
@@ -93,7 +148,6 @@ const COMMUNITY_CARDS = [
 const PLAYER_COLORS = ["#E74C3C", "#3498DB", "#27AE60", "#F39C12"];
 const PLAYER_TOKENS = ["🎩", "🚢", "🏎️", "🐶"];
 
-// Pre-computed board grid positions (never changes)
 const CELL_POSITIONS = [];
 for (let i = 0; i <= 10; i++)  CELL_POSITIONS.push({ id: i,  gridRow: 11, gridColumn: 11 - i });
 for (let i = 11; i <= 19; i++) CELL_POSITIONS.push({ id: i,  gridRow: 11 - (i - 10), gridColumn: 1 });
@@ -124,14 +178,56 @@ function freshGameState(playerCount) {
   };
 }
 
-// Safe helpers — never crash on null/undefined from Firebase
 function safePlayers(gs) { return Array.isArray(gs?.players) ? gs.players : []; }
 function safeProps(gs)   { return gs?.properties && typeof gs.properties === "object" ? gs.properties : {}; }
 function safeLog(gs)     { return Array.isArray(gs?.log) ? gs.log : []; }
 function safeDice(gs)    { return Array.isArray(gs?.dice) ? gs.dice : [1, 1]; }
 
+// ── Animated Dice ─────────────────────────────────────────────────────────────
+function Dice({ value, rolling, landed }) {
+  const faces = ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+  // While rolling, show random faces cycling
+  const [display, setDisplay] = useState(value);
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (rolling) {
+      intervalRef.current = setInterval(() => {
+        setDisplay(Math.ceil(Math.random() * 6));
+      }, 80);
+    } else {
+      clearInterval(intervalRef.current);
+      setDisplay(value);
+    }
+    return () => clearInterval(intervalRef.current);
+  }, [rolling, value]);
+
+  return (
+    <div
+      className={rolling ? "dice-rolling" : landed ? "dice-landed" : ""}
+      style={{
+        width: 38, height: 38,
+        background: rolling ? "#fff" : "#fff",
+        border: rolling ? "2px solid #f59e0b" : "2px solid #444",
+        borderRadius: 8,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 22,
+        boxShadow: rolling
+          ? "0 0 12px rgba(255,165,0,0.8)"
+          : landed
+          ? "0 0 16px rgba(255,215,0,0.9)"
+          : "2px 2px 5px rgba(0,0,0,0.3)",
+        transition: "border-color 0.2s, box-shadow 0.2s",
+        userSelect: "none",
+      }}
+    >
+      {faces[display] || "⚀"}
+    </div>
+  );
+}
+
 // ── Board Cell ────────────────────────────────────────────────────────────────
-function BoardCell({ spaceId, players, properties, isSelected, onClick }) {
+function BoardCell({ spaceId, players, properties, isSelected, onClick, movingPlayers, arrivedPlayers }) {
   const space = SPACES[spaceId];
   if (!space) return <div style={{ width: "100%", height: "100%" }} />;
 
@@ -157,14 +253,24 @@ function BoardCell({ spaceId, players, properties, isSelected, onClick }) {
     .replace("Pennsylvania", "PA").replace("North Carolina", "NC")
     .replace("Reading Railroad", "Reading RR");
 
+  // Is any player currently stepping through this cell?
+  const isFlashing = movingPlayers && movingPlayers.includes(spaceId);
+
   return (
     <div onClick={onClick} style={{
-      width: "100%", height: "100%", boxSizing: "border-box", background: bg,
+      width: "100%", height: "100%", boxSizing: "border-box",
+      background: bg,
       border: isSelected ? "2px solid #fbbf24" : "1px solid #9ca3af",
       cursor: "pointer", position: "relative", overflow: "hidden",
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center", padding: 1,
-      boxShadow: isSelected ? "inset 0 0 6px rgba(251,191,36,0.6)" : "none",
+      boxShadow: isSelected
+        ? "inset 0 0 6px rgba(251,191,36,0.6)"
+        : isFlashing
+        ? "inset 0 0 10px rgba(255,165,0,0.7)"
+        : "none",
+      transition: "box-shadow 0.15s",
+      animation: isFlashing ? "cellFlash 0.35s ease-out" : "none",
     }}>
       {space.type === "property" && space.color && (
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 7, background: space.color }} />
@@ -177,74 +283,91 @@ function BoardCell({ spaceId, players, properties, isSelected, onClick }) {
       {prop && <div style={{ fontSize: 8 }}>{prop.hotel ? "🏨" : "🏠".repeat(prop.houses || 0)}</div>}
       {here.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center" }}>
-          {here.map(p => <span key={p.id} style={{ fontSize: 11, lineHeight: 1 }}>{p.token}</span>)}
+          {here.map(p => {
+            const isMoving = movingPlayers && movingPlayers.includes(spaceId) &&
+              p.id === (movingPlayers._playerId);
+            const isArrived = arrivedPlayers && arrivedPlayers.includes(p.id);
+            return (
+              <span
+                key={p.id}
+                className={isArrived ? "token-arrived" : isMoving ? "token-moving" : ""}
+                style={{ fontSize: 12, lineHeight: 1, display: "inline-block" }}
+              >
+                {p.token}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// ── App ───────────────────────────────────────────────────────────────────────
+// ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [screen, setScreen]       = useState("lobby");
+  const [screen, setScreen]           = useState("lobby");
   const [playerCount, setPlayerCount] = useState(2);
-  const [roomCode, setRoomCode]   = useState("");
-  const [joinCode, setJoinCode]   = useState("");
-  const [myIdx, setMyIdx]         = useState(null);
-  const [isHost, setIsHost]       = useState(false);
-  const [gameState, setGameState] = useState(null);
+  const [roomCode, setRoomCode]       = useState("");
+  const [joinCode, setJoinCode]       = useState("");
+  const [myIdx, setMyIdx]             = useState(null);
+  const [isHost, setIsHost]           = useState(false);
+  const [gameState, setGameState]     = useState(null);
   const [lobbyPlayers, setLobbyPlayers] = useState([]);
   const [selectedSpace, setSelectedSpace] = useState(null);
-  const [error, setError]         = useState("");
-  const [processing, setProcessing] = useState(false);
+  const [error, setError]             = useState("");
+  const [processing, setProcessing]   = useState(false);
 
-  const gsRef   = useRef(null);
+  // ── Animation state ──
+  const [diceRolling, setDiceRolling] = useState(false);
+  const [diceLanded, setDiceLanded]   = useState(false);
+  const [flashingCell, setFlashingCell] = useState(null); // spaceId being stepped through
+  const [arrivedPlayer, setArrivedPlayer] = useState(null); // playerId that just arrived
+
+  const gsRef    = useRef(null);
   const myIdxRef = useRef(null);
-  gsRef.current   = gameState;
+  gsRef.current    = gameState;
   myIdxRef.current = myIdx;
 
-  // ── Listen to game state ──
+  // Inject CSS once
+  useEffect(() => {
+    if (document.getElementById("monopoly-anim")) return;
+    const style = document.createElement("style");
+    style.id = "monopoly-anim";
+    style.textContent = ANIM_STYLE;
+    document.head.appendChild(style);
+  }, []);
+
+  // ── Firebase listeners ──
   useEffect(() => {
     if (!roomCode || screen === "lobby") return;
     const gameRef = ref(db, `games/${roomCode}/state`);
     const unsub = onValue(gameRef, snap => {
       if (snap.exists()) {
         const data = snap.val();
-        // Ensure properties is always an object, never null
         if (data.properties == null) data.properties = {};
         if (!Array.isArray(data.log)) data.log = [];
         if (!Array.isArray(data.dice)) data.dice = [1, 1];
         if (!Array.isArray(data.players)) data.players = [];
         setGameState(data);
-        if (data.status === "playing" && screen === "waiting") {
-          setScreen("game");
-        }
+        if (data.status === "playing" && screen === "waiting") setScreen("game");
       }
     });
     return () => unsub();
   }, [roomCode, screen]);
 
-  // ── Listen to lobby ──
   useEffect(() => {
     if (!roomCode || screen !== "waiting") return;
     const lobbyRef = ref(db, `games/${roomCode}/lobby`);
     const unsub = onValue(lobbyRef, snap => {
-      if (snap.exists()) {
-        const data = snap.val();
-        const list = Object.values(data).filter(Boolean);
-        setLobbyPlayers(list);
-      }
+      if (snap.exists()) setLobbyPlayers(Object.values(snap.val()).filter(Boolean));
     });
     return () => unsub();
   }, [roomCode, screen]);
 
-  // ── Create game ──
+  // ── Create / Join ──
   const createGame = async () => {
     const code = generateCode();
-    setRoomCode(code);
-    setIsHost(true);
-    setMyIdx(0);
-    myIdxRef.current = 0;
+    setRoomCode(code); setIsHost(true); setMyIdx(0); myIdxRef.current = 0;
     await set(ref(db, `games/${code}`), {
       lobby: { 0: { id: 0, token: PLAYER_TOKENS[0], color: PLAYER_COLORS[0] } },
       state: { hostPlayerCount: playerCount, status: "waiting", properties: {}, players: [], log: [], dice: [1,1] },
@@ -252,7 +375,6 @@ export default function App() {
     setScreen("waiting");
   };
 
-  // ── Join game ──
   const joinGame = async () => {
     const code = joinCode.toUpperCase().trim();
     if (code.length < 4) { setError("Enter a valid room code"); return; }
@@ -264,28 +386,32 @@ export default function App() {
     const maxPlayers = data.state?.hostPlayerCount || 2;
     if (lobbyCount >= maxPlayers) { setError("Room is full!"); return; }
     const idx = lobbyCount;
-    setMyIdx(idx);
-    myIdxRef.current = idx;
-    setRoomCode(code);
-    setIsHost(false);
+    setMyIdx(idx); myIdxRef.current = idx;
+    setRoomCode(code); setIsHost(false);
     await update(ref(db, `games/${code}/lobby`), {
       [idx]: { id: idx, token: PLAYER_TOKENS[idx], color: PLAYER_COLORS[idx] }
     });
     setScreen("waiting");
   };
 
-  // ── Start game ──
   const startGame = async (count) => {
-    const state = freshGameState(count);
-    await set(ref(db, `games/${roomCode}/state`), state);
+    await set(ref(db, `games/${roomCode}/state`), freshGameState(count));
     setScreen("game");
   };
 
   const forceStart = () => startGame(lobbyPlayers.length);
 
+  useEffect(() => {
+    if (screen !== "waiting" || isHost) return;
+    const stRef = ref(db, `games/${roomCode}/state/status`);
+    const unsub = onValue(stRef, snap => {
+      if (snap.exists() && snap.val() === "playing") setScreen("game");
+    });
+    return () => unsub();
+  }, [screen, isHost, roomCode]);
+
   // ── Push state ──
   const pushState = (newState) => {
-    // Always ensure properties is a plain object before pushing
     const safe = {
       ...newState,
       properties: newState.properties && typeof newState.properties === "object" ? newState.properties : {},
@@ -296,26 +422,21 @@ export default function App() {
     return set(ref(db, `games/${roomCode}/state`), safe);
   };
 
-  // ── Game helpers ──
   const isMyTurn = gameState && myIdx === gameState.currentPlayer;
 
   const calcRent = (space, prop, props, dice) => {
-    const safeProps2 = props && typeof props === "object" ? props : {};
+    const p2 = props && typeof props === "object" ? props : {};
     if (space.type === "railroad") {
-      const count = Object.entries(safeProps2).filter(([k, v]) =>
-        v && v.owner === prop.owner && SPACES[+k]?.type === "railroad"
-      ).length;
+      const count = Object.entries(p2).filter(([k,v]) => v && v.owner === prop.owner && SPACES[+k]?.type === "railroad").length;
       return space.rent[Math.min(count - 1, 3)];
     }
     if (space.type === "utility") {
-      const count = Object.entries(safeProps2).filter(([k, v]) =>
-        v && v.owner === prop.owner && SPACES[+k]?.type === "utility"
-      ).length;
-      const diceArr = Array.isArray(dice) ? dice : [1,1];
-      return (diceArr[0] + diceArr[1]) * (count === 2 ? 10 : 4);
+      const count = Object.entries(p2).filter(([k,v]) => v && v.owner === prop.owner && SPACES[+k]?.type === "utility").length;
+      const d = Array.isArray(dice) ? dice : [1,1];
+      return (d[0] + d[1]) * (count === 2 ? 10 : 4);
     }
     const group = COLOR_GROUPS[space.color] || [];
-    const monopoly = group.every(id => safeProps2[id]?.owner === prop.owner);
+    const monopoly = group.every(id => p2[id]?.owner === prop.owner);
     if (prop.hotel) return space.rent[5];
     if ((prop.houses || 0) > 0) return space.rent[prop.houses];
     if (monopoly) return space.rent[0] * 2;
@@ -374,9 +495,7 @@ export default function App() {
         const rent = calcRent(space, prop, props, gs.dice);
         log.unshift(`${player.token} pays $${rent} rent to ${players[prop.owner]?.token || "?"}`);
         players[curIdx] = { ...player, money: player.money - rent };
-        if (players[prop.owner]) {
-          players[prop.owner] = { ...players[prop.owner], money: players[prop.owner].money + rent };
-        }
+        if (players[prop.owner]) players[prop.owner] = { ...players[prop.owner], money: players[prop.owner].money + rent };
         if (players[curIdx].money < 0) {
           log.unshift(`${player.token} is BANKRUPT! 💸`);
           players[curIdx] = { ...players[curIdx], bankrupt: true };
@@ -390,75 +509,128 @@ export default function App() {
     }
   };
 
-  const doMove = (player, steps, gs, props, isDouble) => {
-    const players = safePlayers(gs).map(p => ({ ...p }));
-    const oldPos = player.position;
-    const newPos = (oldPos + steps) % 40;
-    let updPlayer = { ...player, position: newPos };
-    const log = safeLog(gs);
-
-    if (oldPos + steps >= 40) {
-      updPlayer.money += 200;
-      log.unshift(`${player.token} passed GO — +$200!`);
+  // ── Step-by-step movement animation ──
+  const animateMove = (playerIdx, fromPos, steps, gs, props, isDouble) => {
+    const path = [];
+    for (let s = 1; s <= steps; s++) {
+      path.push((fromPos + s) % 40);
     }
-    players[gs.currentPlayer] = updPlayer;
-    log.unshift(`${player.token} → ${SPACES[newPos].name}`);
-    const newGs = { ...gs, players, log: log.slice(0, 25) };
-    doSpaceAction(newPos, updPlayer, newGs, props, isDouble);
+
+    let stepI = 0;
+    const STEP_MS = 200; // ms per step
+
+    const doStep = () => {
+      if (stepI >= path.length) {
+        // Final position — fire arrived animation
+        const finalPos = path[path.length - 1];
+        setFlashingCell(null);
+        setArrivedPlayer(playerIdx);
+        setTimeout(() => setArrivedPlayer(null), 600);
+
+        // Now process the space
+        const allPlayers = safePlayers(gs).map(p => ({ ...p }));
+        const player = allPlayers[playerIdx];
+        const log = safeLog(gs);
+        const updPlayer = { ...player, position: finalPos };
+
+        if (fromPos + steps >= 40) {
+          updPlayer.money += 200;
+          log.unshift(`${player.token} passed GO — +$200!`);
+        }
+        allPlayers[playerIdx] = updPlayer;
+        log.unshift(`${player.token} → ${SPACES[finalPos].name}`);
+        const newGs = { ...gs, players: allPlayers, log: log.slice(0, 25) };
+        setTimeout(() => doSpaceAction(finalPos, updPlayer, newGs, props, isDouble), 400);
+        return;
+      }
+
+      const curCell = path[stepI];
+      setFlashingCell(curCell);
+
+      // Update player position visually (local state only — not pushed to Firebase yet)
+      setGameState(prev => {
+        if (!prev) return prev;
+        const ps = safePlayers(prev).map(p => ({ ...p }));
+        if (ps[playerIdx]) ps[playerIdx] = { ...ps[playerIdx], position: curCell };
+        return { ...prev, players: ps };
+      });
+
+      stepI++;
+      setTimeout(doStep, STEP_MS);
+    };
+
+    setTimeout(doStep, 100);
   };
 
   const handleRoll = () => {
     if (!isMyTurn || gameState.rolled || processing) return;
     setProcessing(true);
+    setDiceLanded(false);
 
     const gs = { ...gsRef.current };
     const players = safePlayers(gs).map(p => ({ ...p }));
     const props = safeProps(gs);
     const player = players[gs.currentPlayer];
-    if (!player || player.bankrupt) {
-      advanceTurn(gs);
-      return;
-    }
+    if (!player || player.bankrupt) { advanceTurn(gs); return; }
 
-    const d1 = Math.ceil(Math.random() * 6);
-    const d2 = Math.ceil(Math.random() * 6);
-    const isDouble = d1 === d2;
-    const newDC = isDouble ? (gs.doubleCount || 0) + 1 : 0;
-    const log = safeLog(gs);
-    log.unshift(`${player.token} rolls ${d1}+${d2}=${d1+d2}${isDouble ? " 🎲 Doubles!" : ""}`);
+    // Start dice shake animation
+    setDiceRolling(true);
 
-    if (player.inJail) {
-      if (isDouble) {
-        log.unshift(`${player.token} escapes jail with doubles!`);
-        const freed = { ...player, inJail: false, jailTurns: 0 };
-        players[gs.currentPlayer] = freed;
-        doMove(freed, d1 + d2, { ...gs, players, dice: [d1,d2], doubleCount: 0, log: log.slice(0,25) }, props, false);
-      } else {
-        const newJT = (player.jailTurns || 0) + 1;
-        if (newJT >= 3) {
-          log.unshift(`${player.token} pays $50 fine — out of jail`);
-          const freed = { ...player, inJail: false, jailTurns: 0, money: player.money - 50 };
+    // Roll after short shake delay
+    setTimeout(() => {
+      const d1 = Math.ceil(Math.random() * 6);
+      const d2 = Math.ceil(Math.random() * 6);
+      const isDouble = d1 === d2;
+      const newDC = isDouble ? (gs.doubleCount || 0) + 1 : 0;
+      const log = safeLog(gs);
+      log.unshift(`${player.token} rolls ${d1}+${d2}=${d1+d2}${isDouble ? " 🎲 Doubles!" : ""}`);
+
+      // Stop rolling, show landed animation
+      setDiceRolling(false);
+      setDiceLanded(true);
+
+      // Update dice in Firebase immediately so other players see it
+      pushState({ ...gs, dice: [d1, d2], log: log.slice(0, 25) });
+
+      setTimeout(() => setDiceLanded(false), 500);
+
+      if (player.inJail) {
+        if (isDouble) {
+          log.unshift(`${player.token} escapes jail with doubles!`);
+          const freed = { ...player, inJail: false, jailTurns: 0 };
           players[gs.currentPlayer] = freed;
-          doMove(freed, d1 + d2, { ...gs, players, dice: [d1,d2], log: log.slice(0,25) }, props, false);
+          const newGs = { ...gs, players, dice: [d1,d2], doubleCount: 0, log: log.slice(0,25) };
+          animateMove(gs.currentPlayer, player.position, d1 + d2, newGs, props, false);
         } else {
-          log.unshift(`${player.token} still in jail (${newJT}/3)`);
-          players[gs.currentPlayer] = { ...player, jailTurns: newJT };
-          pushState({ ...gs, players, dice: [d1,d2], rolled: true, log: log.slice(0,25) })
-            .then(() => setProcessing(false));
+          const newJT = (player.jailTurns || 0) + 1;
+          if (newJT >= 3) {
+            log.unshift(`${player.token} pays $50 fine — out of jail`);
+            const freed = { ...player, inJail: false, jailTurns: 0, money: player.money - 50 };
+            players[gs.currentPlayer] = freed;
+            const newGs = { ...gs, players, dice: [d1,d2], log: log.slice(0,25) };
+            animateMove(gs.currentPlayer, player.position, d1 + d2, newGs, props, false);
+          } else {
+            log.unshift(`${player.token} still in jail (${newJT}/3)`);
+            players[gs.currentPlayer] = { ...player, jailTurns: newJT };
+            pushState({ ...gs, players, dice: [d1,d2], rolled: true, log: log.slice(0,25) })
+              .then(() => setProcessing(false));
+          }
         }
+        return;
       }
-      return;
-    }
 
-    if (newDC === 3) {
-      log.unshift(`${player.token} rolled 3 doubles — Jail! 🔒`);
-      players[gs.currentPlayer] = { ...player, position: 10, inJail: true, jailTurns: 0 };
-      pushState({ ...gs, players, dice: [d1,d2], rolled: true, doubleCount: 0, log: log.slice(0,25) })
-        .then(() => setProcessing(false));
-      return;
-    }
+      if (newDC === 3) {
+        log.unshift(`${player.token} rolled 3 doubles — Jail! 🔒`);
+        players[gs.currentPlayer] = { ...player, position: 10, inJail: true, jailTurns: 0 };
+        pushState({ ...gs, players, dice: [d1,d2], rolled: true, doubleCount: 0, log: log.slice(0,25) })
+          .then(() => setProcessing(false));
+        return;
+      }
 
-    doMove(player, d1 + d2, { ...gs, players, dice: [d1,d2], doubleCount: newDC, log: log.slice(0,25) }, props, isDouble);
+      const newGs = { ...gs, players, dice: [d1,d2], doubleCount: newDC, log: log.slice(0,25) };
+      animateMove(gs.currentPlayer, player.position, d1 + d2, newGs, props, isDouble);
+
+    }, 800); // shake for 800ms
   };
 
   const advanceTurn = (gs) => {
@@ -495,18 +667,13 @@ export default function App() {
     const props = safeProps(gameState);
     const player = players[playerIdx];
     const log = safeLog(gameState);
-    if (!player || player.money < space.price) {
-      pushState({ ...gameState, modal: null });
-      return;
-    }
+    if (!player || player.money < space.price) { pushState({ ...gameState, modal: null }); return; }
     players[playerIdx] = { ...player, money: player.money - space.price };
     log.unshift(`${player.token} bought ${space.name} for $${space.price}`);
     pushState({
-      ...gameState,
-      players,
+      ...gameState, players,
       properties: { ...props, [spaceId]: { owner: playerIdx, houses: 0, hotel: false } },
-      modal: null,
-      log: log.slice(0, 25),
+      modal: null, log: log.slice(0, 25),
     });
   };
 
@@ -521,7 +688,7 @@ export default function App() {
     const players = safePlayers(gs).map(p => ({ ...p }));
     const player = players[myIdx];
     const group = COLOR_GROUPS[space.color] || [];
-    if (!group.every(id => props[id]?.owner === myIdx)) { return; }
+    if (!group.every(id => props[id]?.owner === myIdx)) return;
     if (prop.hotel) return;
     const cost = space.houseCost || 100;
     if (player.money < cost) return;
@@ -550,7 +717,6 @@ export default function App() {
     pushState({ ...gs, players, log: log.slice(0,25) });
   };
 
-  // ── Grid dims ──
   const CORNER = 68, CELL = 46;
   const cols = [CORNER, ...Array(9).fill(CELL), CORNER];
   const rows = [CORNER, ...Array(9).fill(CELL), CORNER];
@@ -624,7 +790,7 @@ export default function App() {
     );
   }
 
-  // ── WAITING ROOM ──────────────────────────────────────────────────────────────
+  // ── WAITING ───────────────────────────────────────────────────────────────────
   if (screen === "waiting") {
     const maxPlayers = gameState?.hostPlayerCount || playerCount;
     return (
@@ -642,14 +808,10 @@ export default function App() {
           <p style={{ color: "#78716c", fontSize: 13, marginBottom: 20 }}>
             {lobbyPlayers.length} / {maxPlayers} players joined
           </p>
-
           <div style={{ background: "#14532d", borderRadius: 10, padding: "14px 24px", marginBottom: 24 }}>
             <p style={{ color: "#86efac", fontSize: 11, margin: "0 0 4px", letterSpacing: 2 }}>ROOM CODE — share with friends</p>
-            <div style={{ color: "#fff", fontSize: 40, fontWeight: 900, letterSpacing: 10, fontFamily: "monospace" }}>
-              {roomCode}
-            </div>
+            <div style={{ color: "#fff", fontSize: 40, fontWeight: 900, letterSpacing: 10, fontFamily: "monospace" }}>{roomCode}</div>
           </div>
-
           {Array.from({ length: maxPlayers }, (_, i) => {
             const p = lobbyPlayers[i];
             return (
@@ -667,18 +829,16 @@ export default function App() {
               </div>
             );
           })}
-
           <div style={{ marginTop: 16 }}>
-            {isHost && lobbyPlayers.length >= 2 ? (
-              <button onClick={forceStart} style={{
-                background: "#14532d", color: "#fff", border: "none", padding: "12px 0",
-                borderRadius: 8, fontSize: 15, fontWeight: "bold", cursor: "pointer", width: "100%",
-              }}>▶ Start Game ({lobbyPlayers.length} players)</button>
-            ) : (
-              <p style={{ color: "#78716c", fontSize: 13 }}>
-                {isHost ? "Need at least 2 players to start" : "Waiting for host to start..."}
-              </p>
-            )}
+            {isHost && lobbyPlayers.length >= 2
+              ? <button onClick={forceStart} style={{
+                  background: "#14532d", color: "#fff", border: "none", padding: "12px 0",
+                  borderRadius: 8, fontSize: 15, fontWeight: "bold", cursor: "pointer", width: "100%",
+                }}>▶ Start Game ({lobbyPlayers.length} players)</button>
+              : <p style={{ color: "#78716c", fontSize: 13 }}>
+                  {isHost ? "Need at least 2 players to start" : "Waiting for host to start..."}
+                </p>
+            }
           </div>
         </div>
       </div>
@@ -688,7 +848,7 @@ export default function App() {
   // ── GAME OVER ─────────────────────────────────────────────────────────────────
   if (gameState?.status === "gameover") {
     const players = safePlayers(gameState);
-    const winner = players.length > 0 ? players.reduce((a, b) => (a.money > b.money ? a : b)) : null;
+    const winner = players.length > 0 ? players.reduce((a, b) => a.money > b.money ? a : b) : null;
     return (
       <div style={{
         minHeight: "100vh", background: "linear-gradient(145deg,#14532d,#15803d)",
@@ -718,14 +878,13 @@ export default function App() {
         minHeight: "100vh", background: "#14532d",
         display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16,
       }}>
-        <div style={{ fontSize: 48 }}>🎲</div>
-        <div style={{ color: "#86efac", fontSize: 20, fontFamily: "Georgia" }}>Loading game...</div>
-        <div style={{ color: "#6ee7b7", fontSize: 12 }}>Connecting to room {roomCode}</div>
+        <div style={{ width: 40, height: 40, border: "4px solid #86efac", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <div style={{ color: "#86efac", fontSize: 18, fontFamily: "Georgia" }}>Joining game...</div>
       </div>
     );
   }
 
-  // ── GAME BOARD ────────────────────────────────────────────────────────────────
+  // ── GAME ──────────────────────────────────────────────────────────────────────
   const players = safePlayers(gameState);
   const props   = safeProps(gameState);
   const logArr  = safeLog(gameState);
@@ -750,9 +909,7 @@ export default function App() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 16, fontWeight: "bold", letterSpacing: 2, color: "#14532d" }}>🎲 MONOPOLY</span>
-          <span style={{ fontSize: 10, background: "#14532d", color: "#fff", padding: "2px 8px", borderRadius: 10, fontFamily: "monospace" }}>
-            {roomCode}
-          </span>
+          <span style={{ fontSize: 10, background: "#14532d", color: "#fff", padding: "2px 8px", borderRadius: 10, fontFamily: "monospace" }}>{roomCode}</span>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {players.map((p, i) => p ? (
@@ -761,6 +918,7 @@ export default function App() {
               background: gameState.currentPlayer === i ? "#dcfce7" : i === myIdx ? "#fef9c3" : "transparent",
               border: gameState.currentPlayer === i ? "2px solid #14532d" : i === myIdx ? "2px solid #ca8a04" : "2px solid transparent",
               borderRadius: 6, padding: "2px 8px",
+              transition: "background 0.3s, border-color 0.3s",
             }}>
               <span style={{ fontSize: 15 }}>{p.token}</span>
               <div>
@@ -773,8 +931,7 @@ export default function App() {
           ) : null)}
         </div>
         <button onClick={() => { setScreen("lobby"); setGameState(null); setRoomCode(""); }} style={{
-          background: "#dc2626", color: "#fff", border: "none", padding: "3px 10px",
-          borderRadius: 4, fontSize: 11, cursor: "pointer",
+          background: "#dc2626", color: "#fff", border: "none", padding: "3px 10px", borderRadius: 4, fontSize: 11, cursor: "pointer",
         }}>Leave</button>
       </div>
 
@@ -782,6 +939,7 @@ export default function App() {
       <div style={{
         textAlign: "center", fontSize: 13, fontWeight: "bold", padding: 2,
         color: isMyTurn ? "#86efac" : "#fca5a5",
+        transition: "color 0.3s",
       }}>
         {isMyTurn ? "✅ YOUR TURN — Roll the dice!" : `⏳ Waiting for ${cur?.token || "?"} Player ${(gameState.currentPlayer || 0) + 1}...`}
       </div>
@@ -804,6 +962,8 @@ export default function App() {
                 properties={props}
                 isSelected={selectedSpace === id}
                 onClick={() => setSelectedSpace(selectedSpace === id ? null : id)}
+                movingPlayers={flashingCell === id ? [id] : null}
+                arrivedPlayers={arrivedPlayer !== null ? [arrivedPlayer] : []}
               />
             </div>
           ))}
@@ -820,17 +980,17 @@ export default function App() {
             <div style={{ fontSize: 11, color: "#555", background: "#fff8", padding: "2px 8px", borderRadius: 4 }}>
               🅿️ ${gameState.freePot || 0}
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
+            {/* Animated dice */}
+            <div style={{ display: "flex", gap: 10 }}>
               {diceArr.map((d, i) => (
-                <div key={i} style={{
-                  width: 34, height: 34, background: "#fff", border: "2px solid #444",
-                  borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 20, boxShadow: "2px 2px 5px rgba(0,0,0,0.3)",
-                }}>
-                  {["","⚀","⚁","⚂","⚃","⚄","⚅"][d] || "⚀"}
-                </div>
+                <Dice key={i} value={d} rolling={diceRolling && isMyTurn} landed={diceLanded && isMyTurn} />
               ))}
             </div>
+            {diceRolling && isMyTurn && (
+              <div style={{ fontSize: 11, color: "#14532d", fontWeight: "bold", animation: "spin 0.5s linear infinite", display: "inline-block" }}>
+                🎲
+              </div>
+            )}
           </div>
         </div>
 
@@ -848,18 +1008,32 @@ export default function App() {
                 {me.inJail && <span style={{ fontSize: 10, background: "#fef08a", padding: "2px 5px", borderRadius: 4 }}>🔒 JAIL</span>}
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <button onClick={handleRoll} disabled={!isMyTurn || gameState.rolled || processing} style={{
-                  background: (!isMyTurn || gameState.rolled || processing) ? "#e5e7eb" : "#14532d",
-                  color: (!isMyTurn || gameState.rolled || processing) ? "#9ca3af" : "#fff",
-                  border: "none", padding: "8px 14px", borderRadius: 6, fontSize: 13,
-                  cursor: (!isMyTurn || gameState.rolled || processing) ? "default" : "pointer", fontWeight: "bold",
-                }}>🎲 Roll</button>
-                <button onClick={endTurn} disabled={!isMyTurn || !gameState.rolled || processing} style={{
-                  background: (!isMyTurn || !gameState.rolled || processing) ? "#e5e7eb" : "#dc2626",
-                  color: (!isMyTurn || !gameState.rolled || processing) ? "#9ca3af" : "#fff",
-                  border: "none", padding: "8px 14px", borderRadius: 6, fontSize: 13,
-                  cursor: (!isMyTurn || !gameState.rolled || processing) ? "default" : "pointer", fontWeight: "bold",
-                }}>End →</button>
+                <button
+                  onClick={handleRoll}
+                  disabled={!isMyTurn || gameState.rolled || processing}
+                  style={{
+                    background: (!isMyTurn || gameState.rolled || processing) ? "#e5e7eb" : "#14532d",
+                    color: (!isMyTurn || gameState.rolled || processing) ? "#9ca3af" : "#fff",
+                    border: "none", padding: "8px 14px", borderRadius: 6, fontSize: 13,
+                    cursor: (!isMyTurn || gameState.rolled || processing) ? "default" : "pointer",
+                    fontWeight: "bold",
+                    transform: (!isMyTurn || gameState.rolled || processing) ? "none" : "scale(1)",
+                    transition: "transform 0.1s",
+                  }}
+                  onMouseDown={e => { if (!(!isMyTurn || gameState.rolled || processing)) e.currentTarget.style.transform = "scale(0.95)"; }}
+                  onMouseUp={e => { e.currentTarget.style.transform = "scale(1)"; }}
+                >🎲 Roll</button>
+                <button
+                  onClick={endTurn}
+                  disabled={!isMyTurn || !gameState.rolled || processing}
+                  style={{
+                    background: (!isMyTurn || !gameState.rolled || processing) ? "#e5e7eb" : "#dc2626",
+                    color: (!isMyTurn || !gameState.rolled || processing) ? "#9ca3af" : "#fff",
+                    border: "none", padding: "8px 14px", borderRadius: 6, fontSize: 13,
+                    cursor: (!isMyTurn || !gameState.rolled || processing) ? "default" : "pointer",
+                    fontWeight: "bold",
+                  }}
+                >End →</button>
                 {me.inJail && isMyTurn && (
                   <button onClick={payJailFine} style={{
                     background: "#d97706", color: "#fff", border: "none",
@@ -896,14 +1070,12 @@ export default function App() {
             </div>
           )}
 
-          {/* Property list */}
+          {/* Properties */}
           <div style={{
             background: "#fefce8", border: "2px solid #a16207",
             borderRadius: 8, padding: 10, overflowY: "auto", maxHeight: 220,
           }}>
-            <div style={{ fontSize: 11, fontWeight: "bold", borderBottom: "1px solid #e7d9a0", paddingBottom: 4, marginBottom: 6 }}>
-              Properties
-            </div>
+            <div style={{ fontSize: 11, fontWeight: "bold", borderBottom: "1px solid #e7d9a0", paddingBottom: 4, marginBottom: 6 }}>Properties</div>
             {Object.keys(props).length === 0
               ? <div style={{ color: "#bbb", fontSize: 11, textAlign: "center", padding: 8 }}>None yet</div>
               : Object.entries(props).map(([id, prop]) => {
@@ -934,9 +1106,11 @@ export default function App() {
             height: 160, overflowY: "auto", border: "2px solid #334155",
           }}>
             {logArr.map((msg, i) => (
-              <div key={i} style={{ color: i === 0 ? "#86efac" : "#64748b", fontSize: 10, lineHeight: 1.5 }}>
-                {msg}
-              </div>
+              <div key={i} style={{
+                color: i === 0 ? "#86efac" : "#64748b",
+                fontSize: 10, lineHeight: 1.5,
+                transition: "color 0.5s",
+              }}>{msg}</div>
             ))}
           </div>
         </div>
@@ -951,6 +1125,7 @@ export default function App() {
           <div style={{
             background: "#fefce8", borderRadius: 14, padding: 28, maxWidth: 320, width: "90%",
             border: "3px solid #a16207", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", textAlign: "center",
+            animation: "diceLand 0.3s ease-out",
           }}>
             {modal.type === "buy" && (() => {
               const space = SPACES[modal.spaceId];
@@ -973,7 +1148,11 @@ export default function App() {
                         color: "#fff", border: "none", padding: "10px 22px",
                         borderRadius: 6, fontSize: 14, fontWeight: "bold",
                         cursor: p.money >= space.price ? "pointer" : "default",
-                      }}>Buy ✓</button>
+                        transition: "transform 0.1s",
+                      }}
+                        onMouseDown={e => { e.currentTarget.style.transform = "scale(0.95)"; }}
+                        onMouseUp={e => { e.currentTarget.style.transform = "scale(1)"; }}
+                      >Buy ✓</button>
                       <button onClick={dismissModal} style={{
                         background: "#dc2626", color: "#fff", border: "none",
                         padding: "10px 22px", borderRadius: 6, fontSize: 14, cursor: "pointer", fontWeight: "bold",
