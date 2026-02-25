@@ -37,38 +37,49 @@ const STYLE = `
   .token-bounce { animation: tokenBounce 0.55s ease-out forwards; }
   .cell-pulse { animation: cellPulse 0.35s ease-out; }
 
-  /* Dot-based dice */
+  /* Dot-based dice using absolute positioning — reliable cross-browser */
   .die {
-    width: 40px; height: 40px;
+    width: 44px; height: 44px;
     background: #fff;
     border: 2px solid #444;
     border-radius: 8px;
-    display: grid;
-    padding: 5px;
-    box-sizing: border-box;
-    box-shadow: 2px 2px 6px rgba(0,0,0,0.3);
     position: relative;
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.3);
+    box-sizing: border-box;
   }
   .dot {
-    width: 7px; height: 7px;
+    width: 8px; height: 8px;
     background: #1a1a1a;
     border-radius: 50%;
-    align-self: center;
-    justify-self: center;
+    position: absolute;
   }
-  /* Face layouts using grid-template-areas */
-  .face-1 { grid-template: "a" / 1fr; place-items: center; }
-  .face-2 { grid-template: "a ." ". b" / 1fr 1fr; }
-  .face-3 { grid-template: "a ." "c c" ". b" / 1fr 1fr; }
-  .face-4 { grid-template: "a b" "c d" / 1fr 1fr; }
-  .face-5 { grid-template: "a b" "c c" "d e" / 1fr 1fr; }
-  .face-6 { grid-template: "a b" "c d" "e f" / 1fr 1fr; }
-  .face-1 .dot:nth-child(1) { grid-area: a; }
-  .face-2 .dot:nth-child(1) { grid-area: a; } .face-2 .dot:nth-child(2) { grid-area: b; }
-  .face-3 .dot:nth-child(1) { grid-area: a; } .face-3 .dot:nth-child(2) { grid-area: b; } .face-3 .dot:nth-child(3) { grid-area: c; }
-  .face-4 .dot:nth-child(1) { grid-area: a; } .face-4 .dot:nth-child(2) { grid-area: b; } .face-4 .dot:nth-child(3) { grid-area: c; } .face-4 .dot:nth-child(4) { grid-area: d; }
-  .face-5 .dot:nth-child(1) { grid-area: a; } .face-5 .dot:nth-child(2) { grid-area: b; } .face-5 .dot:nth-child(3) { grid-area: c; } .face-5 .dot:nth-child(4) { grid-area: d; } .face-5 .dot:nth-child(5) { grid-area: e; }
-  .face-6 .dot:nth-child(1) { grid-area: a; } .face-6 .dot:nth-child(2) { grid-area: b; } .face-6 .dot:nth-child(3) { grid-area: c; } .face-6 .dot:nth-child(4) { grid-area: d; } .face-6 .dot:nth-child(5) { grid-area: e; } .face-6 .dot:nth-child(6) { grid-area: f; }
+  /* Face 1 */
+  .face-1 .dot:nth-child(1) { top:50%; left:50%; transform:translate(-50%,-50%); }
+  /* Face 2 */
+  .face-2 .dot:nth-child(1) { top:8px;  left:8px; }
+  .face-2 .dot:nth-child(2) { bottom:8px; right:8px; }
+  /* Face 3 */
+  .face-3 .dot:nth-child(1) { top:8px;  left:8px; }
+  .face-3 .dot:nth-child(2) { top:50%; left:50%; transform:translate(-50%,-50%); }
+  .face-3 .dot:nth-child(3) { bottom:8px; right:8px; }
+  /* Face 4 */
+  .face-4 .dot:nth-child(1) { top:8px;    left:8px; }
+  .face-4 .dot:nth-child(2) { top:8px;    right:8px; }
+  .face-4 .dot:nth-child(3) { bottom:8px; left:8px; }
+  .face-4 .dot:nth-child(4) { bottom:8px; right:8px; }
+  /* Face 5 */
+  .face-5 .dot:nth-child(1) { top:8px;    left:8px; }
+  .face-5 .dot:nth-child(2) { top:8px;    right:8px; }
+  .face-5 .dot:nth-child(3) { top:50%;    left:50%; transform:translate(-50%,-50%); }
+  .face-5 .dot:nth-child(4) { bottom:8px; left:8px; }
+  .face-5 .dot:nth-child(5) { bottom:8px; right:8px; }
+  /* Face 6 */
+  .face-6 .dot:nth-child(1) { top:8px;    left:8px; }
+  .face-6 .dot:nth-child(2) { top:8px;    right:8px; }
+  .face-6 .dot:nth-child(3) { top:50%;    left:8px;  transform:translateY(-50%); }
+  .face-6 .dot:nth-child(4) { top:50%;    right:8px; transform:translateY(-50%); }
+  .face-6 .dot:nth-child(5) { bottom:8px; left:8px; }
+  .face-6 .dot:nth-child(6) { bottom:8px; right:8px; }
 `;
 
 const firebaseConfig = {
@@ -296,6 +307,9 @@ export default function App() {
   const [selectedSpace, setSelectedSpace] = useState(null);
   const [error, setError]               = useState("");
   const [processing, setProcessing]     = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput]       = useState("");
+  const chatEndRef                      = useRef(null);
 
   // Local animation state — driven by watching Firebase changes
   const [diceLanding, setDiceLanding]   = useState(false);
@@ -363,31 +377,61 @@ export default function App() {
     return () => unsub();
   }, [roomCode, screen]);
 
-  // ── Watch player positions for step-animation on ALL clients ──
-  // When a player's Firebase position changes, animate steps locally
-  const prevPositionsRef = useRef({});
+  // ── Chat listener ──
+  useEffect(() => {
+    if (!roomCode || screen === "lobby") return;
+    const chatRef = ref(db, `games/${roomCode}/chat`);
+    const unsub = onValue(chatRef, snap => {
+      if (snap.exists()) {
+        const data = snap.val();
+        const msgs = Object.values(data).sort((a, b) => a.ts - b.ts);
+        setChatMessages(msgs);
+        // Auto-scroll to bottom
+        setTimeout(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, 50);
+      } else {
+        setChatMessages([]);
+      }
+    });
+    return () => unsub();
+  }, [roomCode, screen]);
+
+  // ── Watch player positions — animate steps on ALL clients ──
+  const prevPositionsRef = useRef(null); // null = not seeded yet
+
   useEffect(() => {
     if (!gameState) return;
     const players = safePlayers(gameState);
+    if (!players.length) return;
+
+    // First time: seed positions silently, no animation
+    if (prevPositionsRef.current === null) {
+      const seed = {};
+      players.forEach(p => { if (p) seed[p.id] = p.position; });
+      prevPositionsRef.current = seed;
+      return;
+    }
+
     players.forEach(p => {
-      if (!p) return;
+      if (!p || p.bankrupt) return;
       const prev = prevPositionsRef.current[p.id];
       if (prev === undefined) {
+        // New player — seed without animating
         prevPositionsRef.current[p.id] = p.position;
         return;
       }
       if (prev !== p.position) {
-        // Position changed — animate step by step locally
-        const from = prev;
-        const to   = p.position;
-        const steps = (to - from + 40) % 40 || 40;
+        const from  = prev;
+        const to    = p.position;
+        const steps = to > from ? to - from : (40 - from) + to;
         prevPositionsRef.current[p.id] = to;
-        animateSteps(p.id, from, steps, to);
+        animateSteps(p.id, from, steps);
       }
     });
-  }, [gameState?.players?.map(p => p?.position).join(",")]);
+  // We intentionally use a stringified key so we fire when any position changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState?.players?.map(p => p?.position + "").join(","), gameState?.status]);
 
-  const animateSteps = (playerId, from, steps, finalPos) => {
+  const animateSteps = (playerId, from, steps) => {
     const STEP_MS = 200;
     let step = 0;
 
@@ -729,6 +773,18 @@ export default function App() {
     pushState({ ...gs, players, log: log.slice(0,25) });
   };
 
+  const sendChat = async () => {
+    const text = chatInput.trim();
+    if (!text || myIdx === null) return;
+    setChatInput("");
+    const me = safePlayers(gsRef.current)[myIdx];
+    const token = me?.token || PLAYER_TOKENS[myIdx] || "?";
+    const msgId = Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+    await update(ref(db, `games/${roomCode}/chat`), {
+      [msgId]: { id: myIdx, token, text, ts: Date.now() }
+    });
+  };
+
   const CORNER = 68, CELL = 46;
   const cols = [CORNER, ...Array(9).fill(CELL), CORNER];
   const rows = [CORNER, ...Array(9).fill(CELL), CORNER];
@@ -814,7 +870,7 @@ export default function App() {
           <div style={{ fontSize:80 }}>🏆</div>
           <h2 style={{ fontSize:32, color:"#14532d" }}>GAME OVER!</h2>
           {winner && <><p style={{ fontSize:20 }}>{winner.token} Player {winner.id+1} wins!</p><p style={{ color:"#666" }}>Wealth: ${winner.money.toLocaleString()}</p></>}
-          <button onClick={() => { setScreen("lobby"); setGameState(null); setRoomCode(""); setMyIdx(null); prevPositionsRef.current={}; }} style={{ marginTop:20, background:"#14532d", color:"#fff", border:"none", padding:"12px 32px", borderRadius:8, fontSize:15, cursor:"pointer", fontWeight:"bold" }}>Back to Lobby</button>
+          <button onClick={() => { setScreen("lobby"); setGameState(null); setRoomCode(""); setMyIdx(null); prevPositionsRef.current = null; }} style={{ marginTop:20, background:"#14532d", color:"#fff", border:"none", padding:"12px 32px", borderRadius:8, fontSize:15, cursor:"pointer", fontWeight:"bold" }}>Back to Lobby</button>
         </div>
       </div>
     );
@@ -870,7 +926,7 @@ export default function App() {
             </div>
           ) : null)}
         </div>
-        <button onClick={() => { setScreen("lobby"); setGameState(null); setRoomCode(""); prevPositionsRef.current={}; }} style={{ background:"#dc2626", color:"#fff", border:"none", padding:"3px 10px", borderRadius:4, fontSize:11, cursor:"pointer" }}>Leave</button>
+        <button onClick={() => { setScreen("lobby"); setGameState(null); setRoomCode(""); prevPositionsRef.current = null; }} style={{ background:"#dc2626", color:"#fff", border:"none", padding:"3px 10px", borderRadius:4, fontSize:11, cursor:"pointer" }}>Leave</button>
       </div>
 
       {/* Turn banner */}
@@ -970,11 +1026,67 @@ export default function App() {
           </div>
 
           {/* Log */}
-          <div style={{ background:"#0f172a", borderRadius:8, padding:10, height:160, overflowY:"auto", border:"2px solid #334155" }}>
+          <div style={{ background:"#0f172a", borderRadius:8, padding:10, height:120, overflowY:"auto", border:"2px solid #334155" }}>
             {logArr.map((msg, i) => (
               <div key={i} style={{ color:i===0?"#86efac":"#64748b", fontSize:10, lineHeight:1.5 }}>{msg}</div>
             ))}
           </div>
+
+          {/* ── Chat ── */}
+          <div style={{ background:"#1e293b", border:"2px solid #334155", borderRadius:8, display:"flex", flexDirection:"column", height:200 }}>
+            {/* Header */}
+            <div style={{ padding:"6px 10px", borderBottom:"1px solid #334155", fontSize:11, fontWeight:"bold", color:"#94a3b8", letterSpacing:1 }}>
+              💬 CHAT
+            </div>
+            {/* Messages */}
+            <div style={{ flex:1, overflowY:"auto", padding:"6px 10px", display:"flex", flexDirection:"column", gap:4 }}>
+              {chatMessages.length === 0 && (
+                <div style={{ color:"#475569", fontSize:10, textAlign:"center", marginTop:16 }}>No messages yet. Say hi! 👋</div>
+              )}
+              {chatMessages.map((msg, i) => {
+                const isMe = msg.id === myIdx;
+                return (
+                  <div key={i} style={{ display:"flex", flexDirection: isMe ? "row-reverse" : "row", alignItems:"flex-end", gap:4 }}>
+                    <span style={{ fontSize:14, flexShrink:0 }}>{msg.token}</span>
+                    <div style={{
+                      background: isMe ? "#14532d" : "#334155",
+                      color: "#f1f5f9",
+                      padding:"4px 8px", borderRadius: isMe ? "10px 10px 2px 10px" : "10px 10px 10px 2px",
+                      fontSize:11, maxWidth:"80%", wordBreak:"break-word", lineHeight:1.4,
+                    }}>{msg.text}</div>
+                  </div>
+                );
+              })}
+              <div ref={chatEndRef} />
+            </div>
+            {/* Input */}
+            <div style={{ display:"flex", borderTop:"1px solid #334155", padding:6, gap:4 }}>
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") sendChat(); }}
+                placeholder="Type a message..."
+                maxLength={120}
+                style={{
+                  flex:1, background:"#0f172a", border:"1px solid #475569",
+                  borderRadius:6, padding:"5px 8px", color:"#f1f5f9",
+                  fontSize:11, outline:"none",
+                }}
+              />
+              <button
+                onClick={sendChat}
+                disabled={!chatInput.trim()}
+                style={{
+                  background: chatInput.trim() ? "#14532d" : "#1e293b",
+                  color: chatInput.trim() ? "#fff" : "#475569",
+                  border:"none", borderRadius:6, padding:"5px 10px",
+                  fontSize:13, cursor: chatInput.trim() ? "pointer" : "default",
+                  fontWeight:"bold", transition:"background 0.15s",
+                }}
+              >➤</button>
+            </div>
+          </div>
+
         </div>
       </div>
 
