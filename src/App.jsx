@@ -385,14 +385,16 @@ const safeLog      = gs => Array.isArray(gs?.log) ? gs.log : [];
 const safeDice     = gs => Array.isArray(gs?.dice)&&gs.dice.length===2 ? gs.dice : [1,1];
 const safeSettings = gs => ({...DEFAULT_SETTINGS,...(gs?.settings||{})});
 
-function freshGameState(playerCount, settings={}, aiPlayers=[]) {
+function freshGameState(playerCount, settings={}, aiPlayers=[], aiConfigs={}) {
   return {
     players: Array.from({length:playerCount},(_,i)=>({
       id:i, money:1500, position:0,
       color:PLAYER_COLORS[i], token:PLAYER_TOKENS[i],
       inJail:false, jailTurns:0, bankrupt:false,
       jailFreeCards:0, frozenTurns:0, rentImmuneTurns:0,
-      doubleRentTurns:0, isAI: aiPlayers.includes(i),
+      doubleRentTurns:0,
+      isAI: aiPlayers.includes(i),
+      aiConfig: aiConfigs[i] || { difficulty:"medium", personality:"aggressive" },
     })),
     properties:{}, currentPlayer:0, dice:[1,1],
     rolling:false, rolled:false, doubleCount:0, freePot:0,
@@ -404,30 +406,111 @@ function freshGameState(playerCount, settings={}, aiPlayers=[]) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AI Logic
+// AI System — Difficulty + Personality
 // ─────────────────────────────────────────────────────────────────────────────
-function aiDecide(player, space, props, players, gs) {
-  // Buy decision: buy if affordable and strategically worthwhile
-  if (space && (space.type==="property"||space.type==="railroad"||space.type==="utility")) {
-    if (space.price && player.money > space.price + 200) {
-      // More likely to buy if it completes a color group
-      const group = COLOR_GROUPS[space.color] || [];
-      const owned = group.filter(id => props[id]?.owner === player.id).length;
-      const ratio = group.length > 0 ? (owned+1)/group.length : 0;
-      return ratio > 0.5 || Math.random() > 0.3 ? "buy" : "pass";
-    }
-    return "pass";
-  }
-  return null;
+
+// Difficulty profiles: each number is a 0–1 weight controlling AI behaviour
+const AI_DIFFICULTY = {
+  easy:       { buyThreshold:0.45, buildThreshold:0.30, monopolyBonus:0.10, riskTolerance:0.20, cashBuffer:300  },
+  medium:     { buyThreshold:0.60, buildThreshold:0.55, monopolyBonus:0.25, riskTolerance:0.45, cashBuffer:200  },
+  hard:       { buyThreshold:0.75, buildThreshold:0.75, monopolyBonus:0.45, riskTolerance:0.65, cashBuffer:150  },
+  strategic:  { buyThreshold:0.88, buildThreshold:0.90, monopolyBonus:0.70, riskTolerance:0.80, cashBuffer:100  },
+};
+
+// Personality modifiers layered on top of difficulty
+const AI_PERSONALITY = {
+  aggressive:   { buyMod:+0.20, buildMod:+0.25, cashMod:-0.15 },
+  conservative: { buyMod:-0.20, buildMod:-0.20, cashMod:+0.25 },
+  monopolist:   { buyMod:+0.10, buildMod:+0.15, cashMod:0,    monopolyGroupBonus:0.40 },
+  random:       { buyMod:0,     buildMod:0,     cashMod:0,    randomFactor:0.60 },
+};
+
+// Per-game AI config stored in player object
+// player.aiConfig = { difficulty:"medium", personality:"aggressive" }
+
+function aiShouldBuy(player, space, props, players, gs) {
+  if (!space?.price) return false;
+  const cfg   = player.aiConfig || { difficulty:"medium", personality:"aggressive" };
+  const diff  = AI_DIFFICULTY[cfg.difficulty] || AI_DIFFICULTY.medium;
+  const pers  = AI_PERSONALITY[cfg.personality] || AI_PERSONALITY.aggressive;
+
+  // Random personality adds heavy noise
+  if (cfg.personality === "random") return Math.random() > 0.45;
+
+  const cashNeeded = space.price + (diff.cashBuffer + pers.cashMod * 200);
+  if (player.money < cashNeeded) return false;
+
+  const group      = COLOR_GROUPS[space.color] || [];
+  const alreadyOwn = group.filter(id => props[id]?.owner === player.id).length;
+  const groupRatio = group.length > 0 ? (alreadyOwn + 1) / group.length : 0;
+
+  // Base score
+  let score = diff.buyThreshold + pers.buyMod;
+
+  // Bonus for monopoly potential
+  const monoBonus = diff.monopolyBonus + (pers.monopolyGroupBonus || 0);
+  score += groupRatio * monoBonus;
+
+  // Railroads & utilities: always fairly attractive
+  if (space.type === "railroad" || space.type === "utility") score += 0.15;
+
+  // Blocking: if opponent almost has a monopoly, compete harder
+  const opponents = (gs?.players || []).filter(p => p && !p.bankrupt && p.id !== player.id);
+  const opponentNearMono = group.some(id =>
+    props[id] && props[id].owner !== player.id &&
+    group.filter(gid => props[gid]?.owner === props[id]?.owner).length >= group.length - 1
+  );
+  if (opponentNearMono) score += 0.20 * diff.riskTolerance;
+
+  // Normalise 0–1 randomness threshold
+  const roll = Math.random();
+  return roll < score;
+}
+
+function aiShouldBuild(player, spaceId, props, gs) {
+  const space = SPACES[spaceId]; if (!space?.houseCost) return false;
+  const prop  = props[spaceId]; if (!prop || prop.hotel) return false;
+  const cfg   = player.aiConfig || { difficulty:"medium", personality:"aggressive" };
+  const diff  = AI_DIFFICULTY[cfg.difficulty] || AI_DIFFICULTY.medium;
+  const pers  = AI_PERSONALITY[cfg.personality] || AI_PERSONALITY.aggressive;
+
+  if (cfg.personality === "random") return Math.random() > 0.55;
+
+  const cost = space.houseCost;
+  if (player.money < cost + diff.cashBuffer) return false;
+
+  let score = diff.buildThreshold + pers.buildMod;
+
+  // More houses already built → more pressure to keep building
+  score += (prop.houses || 0) * 0.08;
+
+  return Math.random() < score;
 }
 
 function aiPickPropertyToSell(player, props) {
-  // AI sells cheapest owned property
-  const ownedIds = Object.entries(props)
-    .filter(([,p])=>p&&p.owner===player.id)
-    .map(([id])=>+id)
-    .sort((a,b)=>(SPACES[a]?.price||0)-(SPACES[b]?.price||0));
-  return ownedIds[0] ?? null;
+  // Sell cheapest non-monopoly property first, then cheapest overall
+  const owned = Object.entries(props)
+    .filter(([, p]) => p && p.owner === player.id)
+    .map(([id]) => +id);
+
+  // Prefer to sell ones that don't break a monopoly
+  const nonMono = owned.filter(id => {
+    const group = COLOR_GROUPS[SPACES[id]?.color] || [];
+    return !group.every(gid => props[gid]?.owner === player.id);
+  });
+
+  const pool = nonMono.length > 0 ? nonMono : owned;
+  pool.sort((a, b) => (SPACES[a]?.price || 0) - (SPACES[b]?.price || 0));
+  return pool[0] ?? null;
+}
+
+// Jail strategy: harder difficulties pay fine; easy/random tries doubles
+function aiJailStrategy(player) {
+  const cfg  = player.aiConfig || { difficulty:"medium", personality:"aggressive" };
+  const diff = AI_DIFFICULTY[cfg.difficulty] || AI_DIFFICULTY.medium;
+  if ((player.jailFreeCards || 0) > 0) return "card";
+  if (player.money >= 50 && diff.riskTolerance > 0.5) return "pay";
+  return "roll";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -522,7 +605,7 @@ function BoardCell({spaceId, players, properties, isSelected, onClick, flashCell
 // ─────────────────────────────────────────────────────────────────────────────
 // PropertyCardModal – full Monopoly-style property deed card
 // ─────────────────────────────────────────────────────────────────────────────
-function PropertyCardModal({ spaceId, prop, players, myIdx, isMyTurn, onClose, onBuild, onBuy, allProps }) {
+function PropertyCardModal({ spaceId, prop, players, myIdx, isMyTurn, onClose, onBuild, onBuy, allProps, playerIsOnSpace }) {
   const space = SPACES[spaceId];
   if (!space) return null;
 
@@ -659,7 +742,6 @@ function PropertyCardModal({ spaceId, prop, players, myIdx, isMyTurn, onClose, o
               <span style={{ fontSize:12, color:"#374151" }}>
                 🏠 House cost: <strong>${space.houseCost}</strong>
               </span>
-              {/* Current buildings */}
               {isOwned && (
                 <span style={{ fontSize:14 }}>
                   {hasHotel ? "🏨" : houses > 0 ? "🏠".repeat(houses) : "—"}
@@ -667,15 +749,23 @@ function PropertyCardModal({ spaceId, prop, players, myIdx, isMyTurn, onClose, o
               )}
             </div>
 
-            {/* Monopoly requirement hint */}
-            {isMine && !hasMonopoly && (
+            {/* Info: can only build when landed here */}
+            {isMine && !playerIsOnSpace && !hasHotel && (
+              <div style={{ fontSize:11, color:"#9ca3af", marginBottom:8, fontStyle:"italic",
+                background:"#f9fafb", padding:"5px 8px", borderRadius:5 }}>
+                🔒 You can only build here when you land on this property.
+              </div>
+            )}
+
+            {/* Monopoly requirement */}
+            {isMine && playerIsOnSpace && !hasMonopoly && (
               <div style={{ fontSize:11, color:"#9ca3af", marginBottom:8, fontStyle:"italic" }}>
                 Own all {group.length} properties in this group to build.
               </div>
             )}
 
-            {/* Build button */}
-            {isMine && isMyTurn && !hasHotel && hasMonopoly && (
+            {/* Build button — only when physically on this space AND have monopoly */}
+            {onBuild && isMyTurn && !hasHotel && (
               <button
                 onClick={() => onBuild(spaceId)}
                 disabled={!canAfford}
@@ -698,7 +788,7 @@ function PropertyCardModal({ spaceId, prop, players, myIdx, isMyTurn, onClose, o
                 🏨 Hotel built — maximum level reached!
               </div>
             )}
-            {isMine && isMyTurn && hasMonopoly && !canAfford && !hasHotel && (
+            {onBuild && isMyTurn && !canAfford && !hasHotel && (
               <div style={{ textAlign:"center", fontSize:11, color:"#dc2626", marginBottom:8 }}>
                 Not enough funds — need ${space.houseCost}
               </div>
@@ -706,20 +796,28 @@ function PropertyCardModal({ spaceId, prop, players, myIdx, isMyTurn, onClose, o
           </div>
         )}
 
-        {/* ── Buy button (unowned, it's your turn) ── */}
-        {!isOwned && isMyTurn && space.price && onBuy && (
+        {/* ── Buy button — only when physically on this space ── */}
+        {!isOwned && space.price && (
           <div style={{ padding:"10px 14px 12px", borderTop:"2px solid #1a1a1a" }}>
-            <button onClick={onBuy}
-              disabled={!me || me.money < space.price}
-              style={{
-                width:"100%", padding:"9px 0",
-                background: me && me.money >= space.price ? "#14532d" : "#9ca3af",
-                color:"#fff", border:"none", borderRadius:6,
-                fontSize:13, fontWeight:700,
-                cursor: me && me.money >= space.price ? "pointer" : "not-allowed",
-              }}>
-              Buy for ${space.price}
-            </button>
+            {onBuy ? (
+              <button onClick={onBuy}
+                disabled={!me || me.money < space.price}
+                style={{
+                  width:"100%", padding:"9px 0",
+                  background: me && me.money >= space.price ? "#14532d" : "#9ca3af",
+                  color:"#fff", border:"none", borderRadius:6,
+                  fontSize:13, fontWeight:700,
+                  cursor: me && me.money >= space.price ? "pointer" : "not-allowed",
+                }}>
+                Buy for ${space.price}
+              </button>
+            ) : (
+              <div style={{ textAlign:"center", fontSize:11, color:"#9ca3af",
+                fontStyle:"italic", padding:"4px 0" }}>
+                {!isMyTurn ? "Not your turn" : !playerIsOnSpace ?
+                  "🔒 Land on this property to buy it" : "Already owned"}
+              </div>
+            )}
           </div>
         )}
 
@@ -1209,12 +1307,14 @@ function btnStyle(bg, half=false) {
 export default function App() {
   // ── State ──
   const [screen, setScreen]               = useState("lobby");
+  const [lobbyMode, setLobbyMode]         = useState("multiplayer"); // "multiplayer" | "ai"
   const [playerCount, setPlayerCount]     = useState(2);
   const [roomCode, setRoomCode]           = useState("");
   const [joinCode, setJoinCode]           = useState("");
   const [myIdx, setMyIdx]                 = useState(null);
   const [isHost, setIsHost]               = useState(false);
   const [gameState, setGameState]         = useState(null);
+  const [isLocalGame, setIsLocalGame]     = useState(false); // true for AI-only games
   const [lobbyPlayers, setLobbyPlayers]   = useState([]);
   const [error, setError]                 = useState("");
   const [processing, setProcessing]       = useState(false);
@@ -1223,6 +1323,11 @@ export default function App() {
   const [chatMessages, setChatMessages]   = useState([]);
   const [chatInput, setChatInput]         = useState("");
   const chatEndRef                        = useRef(null);
+
+  // AI mode config
+  const [aiOpponentCount, setAiOpponentCount] = useState(1);
+  const [aiDifficulty, setAiDifficulty]       = useState("medium");
+  const [aiPersonality, setAiPersonality]     = useState("aggressive");
 
   // Animation state
   const [diceLanding, setDiceLanding]     = useState(false);
@@ -1387,7 +1492,10 @@ export default function App() {
     setTimeout(tick,50);
   };
 
-  // ── pushState ──
+  // ── pushState — works for local AI games and Firebase multiplayer ──
+  const isLocalGameRef = useRef(false);
+  isLocalGameRef.current = isLocalGame;
+
   const pushState=useCallback((s)=>{
     const safe={...s,
       properties:s.properties&&typeof s.properties==="object"?s.properties:{},
@@ -1396,6 +1504,11 @@ export default function App() {
       players:Array.isArray(s.players)?s.players:[],
       rolling:s.rolling??false,
     };
+    if (isLocalGameRef.current) {
+      // Local AI game: update state directly, return a resolved promise
+      setGameState(safe);
+      return Promise.resolve();
+    }
     return set(ref(db,`games/${roomCode}/state`),safe);
   },[roomCode]);
 
@@ -1540,8 +1653,8 @@ export default function App() {
       if (!prop){
         // AI auto-decides
         if (player.isAI){
-          const decision=aiDecide(player,space,props,players,gs);
-          if (decision==="buy"){
+          const shouldBuy = aiShouldBuy(player, space, props, players, gs);
+          if (shouldBuy){
             log.unshift(`🤖 ${player.token} bought ${space.name}!`);
             players[curIdx]={...player,money:player.money-space.price};
             finishTurn(players,{...props,[spaceId]:{owner:curIdx,houses:0,hotel:false}},undefined,null,false);
@@ -1598,8 +1711,8 @@ export default function App() {
           // Use a short delay so finishTurn writes to Firebase first
           setTimeout(()=>setSelectedSpace(spaceId), 350);
         } else {
-          // AI: auto-build if monopoly and affordable
-          if (hasMonopoly&&!props[spaceId]?.hotel&&player.money>=(space.houseCost||100)){
+          // AI: auto-build using personality/difficulty logic
+          if (hasMonopoly&&!props[spaceId]?.hotel&&aiShouldBuild(player,spaceId,props,gs)){
             const prop=props[spaceId];
             const newProp=(prop.houses||0)>=4
               ?{...prop,houses:0,hotel:true}
@@ -1762,16 +1875,50 @@ export default function App() {
     }
 
     if (cur.inJail){
-      // AI always pays fine if possible
-      const log=safeLog(gs); log.unshift(`🤖 ${cur.token} paid jail fine`);
-      players[gs.currentPlayer]={...cur,money:cur.money-50,inJail:false,jailTurns:0};
-      const d1=Math.ceil(Math.random()*6),d2=Math.ceil(Math.random()*6);
-      pushState({...gs,rolling:true,log:log.slice(0,25)});
-      setTimeout(()=>{
-        players[gs.currentPlayer]={...players[gs.currentPlayer],inJail:false,jailTurns:0};
-        const newGs={...gs,players,dice:[d1,d2],rolling:false,log:log.slice(0,25)};
-        pushState(newGs).then(()=>setTimeout(()=>doMoveAndAction(players[gs.currentPlayer],d1+d2,newGs,safeProps(gs),false,d1,d2),300));
-      },900);
+      const jailStrat = aiJailStrategy(cur);
+      const log=safeLog(gs);
+      if (jailStrat === "card" && (cur.jailFreeCards||0)>0) {
+        log.unshift(`🤖 ${cur.token} used Get Out of Jail Free card!`);
+        players[gs.currentPlayer]={...cur,jailFreeCards:cur.jailFreeCards-1,inJail:false,jailTurns:0};
+        const d1=Math.ceil(Math.random()*6),d2=Math.ceil(Math.random()*6);
+        pushState({...gs,rolling:true,log:log.slice(0,25)});
+        setTimeout(()=>{
+          const newGs={...gs,players,dice:[d1,d2],rolling:false,log:log.slice(0,25)};
+          pushState(newGs).then(()=>setTimeout(()=>doMoveAndAction(players[gs.currentPlayer],d1+d2,newGs,safeProps(gs),false,d1,d2),300));
+        },900);
+      } else if (jailStrat === "pay" && cur.money >= 50) {
+        log.unshift(`🤖 ${cur.token} paid $50 jail fine`);
+        players[gs.currentPlayer]={...cur,money:cur.money-50,inJail:false,jailTurns:0};
+        const d1=Math.ceil(Math.random()*6),d2=Math.ceil(Math.random()*6);
+        pushState({...gs,rolling:true,log:log.slice(0,25)});
+        setTimeout(()=>{
+          const newGs={...gs,players,dice:[d1,d2],rolling:false,log:log.slice(0,25)};
+          pushState(newGs).then(()=>setTimeout(()=>doMoveAndAction(players[gs.currentPlayer],d1+d2,newGs,safeProps(gs),false,d1,d2),300));
+        },900);
+      } else {
+        // Roll for doubles
+        const d1=Math.ceil(Math.random()*6),d2=Math.ceil(Math.random()*6);
+        const isDouble=d1===d2;
+        log.unshift(`🤖 ${cur.token} rolls for doubles: ${d1}+${d2}${isDouble?" 🎲 FREE!":""}`);
+        pushState({...gs,rolling:true,log:log.slice(0,25)});
+        setTimeout(()=>{
+          if (isDouble){
+            players[gs.currentPlayer]={...cur,inJail:false,jailTurns:0};
+            const newGs={...gs,players,dice:[d1,d2],rolling:false,log:log.slice(0,25)};
+            pushState(newGs).then(()=>setTimeout(()=>doMoveAndAction(players[gs.currentPlayer],d1+d2,newGs,safeProps(gs),false,d1,d2),300));
+          } else {
+            const newJT=(cur.jailTurns||0)+1;
+            if (newJT>=3){
+              players[gs.currentPlayer]={...cur,inJail:false,jailTurns:0};
+              const newGs={...gs,players,dice:[d1,d2],rolling:false,log:log.slice(0,25)};
+              pushState(newGs).then(()=>setTimeout(()=>doMoveAndAction(players[gs.currentPlayer],d1+d2,newGs,safeProps(gs),false,d1,d2),300));
+            } else {
+              players[gs.currentPlayer]={...cur,jailTurns:newJT};
+              pushState({...gs,players,dice:[d1,d2],rolled:true,rolling:false,log:log.slice(0,25)}).then(()=>setProcessing(false));
+            }
+          }
+        },900);
+      }
       return;
     }
 
@@ -1929,8 +2076,32 @@ export default function App() {
 
   const startGame=async(count)=>{
     const aiP=settings.aiPlayers||[];
-    const gs=freshGameState(count,settings,aiP);
+    const aiConfigs={};
+    aiP.forEach(idx=>{ aiConfigs[idx]={difficulty:aiDifficulty,personality:aiPersonality}; });
+    const gs=freshGameState(count,settings,aiP,aiConfigs);
     await set(ref(db,`games/${roomCode}/state`),gs);
+    setScreen("game");
+  };
+
+  // Start a fully local AI game (no Firebase, no room code)
+  const startAIGame=()=>{
+    const totalPlayers = 1 + aiOpponentCount; // human is P0
+    const aiPlayerIndices = Array.from({length:aiOpponentCount},(_,i)=>i+1);
+    const aiConfigs={};
+    aiPlayerIndices.forEach(idx=>{
+      // Give each opponent slightly different personality for variety
+      const personalities=["aggressive","conservative","monopolist","random"];
+      aiConfigs[idx]={
+        difficulty: aiDifficulty,
+        personality: personalities[(idx-1) % personalities.length],
+      };
+    });
+    const gs=freshGameState(totalPlayers,{...DEFAULT_SETTINGS},[...aiPlayerIndices],aiConfigs);
+    setMyIdx(0);
+    myIdxRef.current=0;
+    setIsLocalGame(true);
+    prevPositionsRef.current=null;
+    setGameState(gs);
     setScreen("game");
   };
 
@@ -1946,6 +2117,7 @@ export default function App() {
   const resetToLobby=()=>{
     setScreen("lobby"); setGameState(null); setRoomCode(""); setMyIdx(null);
     setShowSettings(false); prevPositionsRef.current=null; setSellToPay(null);
+    setIsLocalGame(false); setSelectedSpace(null);
   };
 
   const CORNER=68, CELL=46;
@@ -1955,56 +2127,186 @@ export default function App() {
   // ════════════════════════════════════════════════════════════
   // LOBBY
   // ════════════════════════════════════════════════════════════
-  if (screen==="lobby") return (
-    <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#14532d,#166534,#15803d)",
-      display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",padding:16}}>
-      <div style={{background:"#fefce8",borderRadius:16,padding:"36px 40px",textAlign:"center",
-        boxShadow:"0 24px 64px rgba(0,0,0,0.5)",border:"4px solid #a16207",maxWidth:440,width:"100%"}}>
-        <div style={{fontSize:64,marginBottom:4}}>🎲</div>
-        <h1 style={{margin:"0 0 4px",fontSize:32,letterSpacing:4,color:"#14532d"}}>MONOPOLY</h1>
-        <p style={{color:"#78716c",fontSize:13,marginBottom:24}}>Online Multiplayer</p>
+  if (screen==="lobby") {
+    const DIFF_INFO = {
+      easy:     { label:"Easy",      emoji:"🟢", desc:"Buys casually, builds slowly" },
+      medium:   { label:"Medium",    emoji:"🟡", desc:"Balanced — competes seriously" },
+      hard:     { label:"Hard",      emoji:"🟠", desc:"Monopoly-focused, long-term" },
+      strategic:{ label:"Strategic", emoji:"🔴", desc:"Calculates risk, targets leaders" },
+    };
+    const PERS_INFO = {
+      aggressive:   { label:"Aggressive",   emoji:"⚔️",  desc:"Buys everything, builds fast" },
+      conservative: { label:"Conservative", emoji:"🛡️",  desc:"Saves cash, avoids risk" },
+      monopolist:   { label:"Monopolist",   emoji:"🏠",  desc:"Obsessed with color sets" },
+      random:       { label:"Random",       emoji:"🎲",  desc:"Unpredictable & chaotic" },
+    };
+    return (
+      <div style={{minHeight:"100vh",
+        background:"linear-gradient(145deg,#14532d 0%,#166534 50%,#15803d 100%)",
+        display:"flex",alignItems:"center",justifyContent:"center",
+        fontFamily:"Georgia,serif",padding:16}}>
+        <div style={{background:"#fefce8",borderRadius:20,
+          boxShadow:"0 24px 64px rgba(0,0,0,0.55)",border:"4px solid #a16207",
+          maxWidth:480,width:"100%",overflow:"hidden"}}>
 
-        <div style={{marginBottom:20,padding:20,background:"#f0fdf4",borderRadius:10,border:"2px solid #bbf7d0"}}>
-          <h3 style={{margin:"0 0 10px",color:"#14532d",fontSize:15}}>🏠 Create a Game</h3>
-          <p style={{fontSize:12,color:"#555",margin:"0 0 10px"}}>Number of Players</p>
-          <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:14}}>
-            {[2,3,4].map(n=>(
-              <button key={n} onClick={()=>setPlayerCount(n)} style={{
-                width:46,height:46,borderRadius:"50%",fontSize:17,fontWeight:"bold",
-                border:playerCount===n?"3px solid #14532d":"2px solid #d4c89a",
-                background:playerCount===n?"#14532d":"#fff",
-                color:playerCount===n?"#fff":"#333",cursor:"pointer"}}>
-                {n}
-              </button>
+          {/* Title */}
+          <div style={{textAlign:"center",padding:"28px 32px 20px",
+            borderBottom:"2px solid #e7d9a0"}}>
+            <div style={{fontSize:60,lineHeight:1,marginBottom:6}}>🎲</div>
+            <h1 style={{margin:"0 0 4px",fontSize:30,letterSpacing:4,color:"#14532d",fontFamily:"Georgia"}}>
+              MONOPOLY
+            </h1>
+            <p style={{color:"#78716c",fontSize:13,margin:0}}>Online Multiplayer &amp; AI Mode</p>
+          </div>
+
+          {/* Mode tabs */}
+          <div style={{display:"flex",borderBottom:"2px solid #e7d9a0"}}>
+            {[["multiplayer","🌐 Multiplayer"],["ai","🤖 vs AI"]].map(([mode,label])=>(
+              <button key={mode} onClick={()=>setLobbyMode(mode)} style={{
+                flex:1,padding:"12px 0",fontSize:14,fontWeight:"bold",
+                border:"none",cursor:"pointer",
+                background:lobbyMode===mode?"#14532d":"#fefce8",
+                color:lobbyMode===mode?"#fff":"#78716c",
+                borderBottom:lobbyMode===mode?"3px solid #14532d":"3px solid transparent",
+                transition:"all 0.15s",
+              }}>{label}</button>
             ))}
           </div>
-          <button onClick={createGame} style={{background:"#14532d",color:"#fff",border:"none",
-            padding:"12px 0",borderRadius:8,fontSize:15,fontWeight:"bold",cursor:"pointer",width:"100%"}}>
-            Create Game →
-          </button>
-        </div>
 
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-          <div style={{flex:1,height:1,background:"#d6d3d1"}}/><span style={{color:"#a8a29e",fontSize:12}}>OR</span>
-          <div style={{flex:1,height:1,background:"#d6d3d1"}}/>
-        </div>
+          <div style={{padding:"24px 28px 28px"}}>
+            {/* ── MULTIPLAYER TAB ── */}
+            {lobbyMode==="multiplayer" && (<>
+              <div style={{marginBottom:20,padding:18,background:"#f0fdf4",
+                borderRadius:10,border:"2px solid #bbf7d0"}}>
+                <h3 style={{margin:"0 0 10px",color:"#14532d",fontSize:15}}>🏠 Create a Game</h3>
+                <p style={{fontSize:12,color:"#555",margin:"0 0 10px"}}>Number of Players</p>
+                <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:14}}>
+                  {[2,3,4].map(n=>(
+                    <button key={n} onClick={()=>setPlayerCount(n)} style={{
+                      width:46,height:46,borderRadius:"50%",fontSize:17,fontWeight:"bold",
+                      border:playerCount===n?"3px solid #14532d":"2px solid #d4c89a",
+                      background:playerCount===n?"#14532d":"#fff",
+                      color:playerCount===n?"#fff":"#333",cursor:"pointer"}}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={createGame} style={{background:"#14532d",color:"#fff",border:"none",
+                  padding:"12px 0",borderRadius:8,fontSize:15,fontWeight:"bold",cursor:"pointer",width:"100%"}}>
+                  Create Game →
+                </button>
+              </div>
 
-        <div style={{padding:20,background:"#eff6ff",borderRadius:10,border:"2px solid #bfdbfe"}}>
-          <h3 style={{margin:"0 0 10px",color:"#1e40af",fontSize:15}}>🔗 Join a Game</h3>
-          <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())}
-            onKeyDown={e=>e.key==="Enter"&&joinGame()} placeholder="Enter room code" maxLength={6}
-            style={{width:"100%",padding:"10px 14px",fontSize:20,textAlign:"center",
-              border:"2px solid #93c5fd",borderRadius:8,fontFamily:"monospace",letterSpacing:6,
-              marginBottom:10,outline:"none",fontWeight:"bold"}}/>
-          {error&&<p style={{color:"#dc2626",fontSize:12,margin:"0 0 8px"}}>{error}</p>}
-          <button onClick={joinGame} style={{background:"#1e40af",color:"#fff",border:"none",
-            padding:"12px 0",borderRadius:8,fontSize:15,fontWeight:"bold",cursor:"pointer",width:"100%"}}>
-            Join Game →
-          </button>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+                <div style={{flex:1,height:1,background:"#d6d3d1"}}/>
+                <span style={{color:"#a8a29e",fontSize:12}}>OR</span>
+                <div style={{flex:1,height:1,background:"#d6d3d1"}}/>
+              </div>
+
+              <div style={{padding:18,background:"#eff6ff",borderRadius:10,border:"2px solid #bfdbfe"}}>
+                <h3 style={{margin:"0 0 10px",color:"#1e40af",fontSize:15}}>🔗 Join a Game</h3>
+                <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())}
+                  onKeyDown={e=>e.key==="Enter"&&joinGame()} placeholder="Enter room code" maxLength={6}
+                  style={{width:"100%",padding:"10px 14px",fontSize:20,textAlign:"center",
+                    border:"2px solid #93c5fd",borderRadius:8,fontFamily:"monospace",letterSpacing:6,
+                    marginBottom:10,outline:"none",fontWeight:"bold",boxSizing:"border-box"}}/>
+                {error&&<p style={{color:"#dc2626",fontSize:12,margin:"0 0 8px"}}>{error}</p>}
+                <button onClick={joinGame} style={{background:"#1e40af",color:"#fff",border:"none",
+                  padding:"12px 0",borderRadius:8,fontSize:15,fontWeight:"bold",cursor:"pointer",width:"100%"}}>
+                  Join Game →
+                </button>
+              </div>
+            </>)}
+
+            {/* ── AI MODE TAB ── */}
+            {lobbyMode==="ai" && (<>
+              <div style={{background:"#f0fdf4",borderRadius:12,padding:16,
+                border:"2px solid #bbf7d0",marginBottom:16}}>
+                <div style={{fontSize:13,fontWeight:"bold",color:"#14532d",marginBottom:10,
+                  display:"flex",alignItems:"center",gap:6}}>
+                  🤖 <span>AI Opponents</span>
+                  <span style={{fontWeight:"normal",color:"#78716c",fontSize:12}}>(you are always Player 1)</span>
+                </div>
+                <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+                  {[1,2,3].map(n=>(
+                    <button key={n} onClick={()=>setAiOpponentCount(n)} style={{
+                      flex:1,padding:"10px 0",borderRadius:8,fontSize:13,fontWeight:"bold",
+                      border:aiOpponentCount===n?"3px solid #14532d":"2px solid #d4c89a",
+                      background:aiOpponentCount===n?"#14532d":"#fff",
+                      color:aiOpponentCount===n?"#fff":"#333",cursor:"pointer",
+                    }}>
+                      {n} AI{n>1?"s":""}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Difficulty */}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:13,fontWeight:"bold",color:"#14532d",marginBottom:8}}>
+                  🎯 Difficulty
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                  {Object.entries(DIFF_INFO).map(([key,{label,emoji,desc}])=>(
+                    <button key={key} onClick={()=>setAiDifficulty(key)} style={{
+                      padding:"10px 12px",borderRadius:8,fontSize:12,fontWeight:"bold",
+                      border:aiDifficulty===key?"3px solid #14532d":"2px solid #d6d3d1",
+                      background:aiDifficulty===key?"#dcfce7":"#fff",
+                      cursor:"pointer",textAlign:"left",lineHeight:1.3,
+                    }}>
+                      <div style={{fontSize:14,marginBottom:2}}>{emoji} {label}</div>
+                      <div style={{fontWeight:"normal",color:"#78716c",fontSize:11}}>{desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Personality */}
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:13,fontWeight:"bold",color:"#14532d",marginBottom:8}}>
+                  🎭 AI Play Style
+                  <span style={{fontWeight:"normal",color:"#78716c",fontSize:11,marginLeft:6}}>
+                    (each AI gets a different style automatically)
+                  </span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                  {Object.entries(PERS_INFO).map(([key,{label,emoji,desc}])=>(
+                    <div key={key} style={{
+                      padding:"8px 10px",borderRadius:8,fontSize:11,
+                      border:"2px solid #e5e7eb",
+                      background:"#f9fafb",lineHeight:1.3,
+                    }}>
+                      <div style={{fontWeight:"bold",marginBottom:2}}>{emoji} {label}</div>
+                      <div style={{color:"#78716c"}}>{desc}</div>
+                    </div>
+                  ))}
+                </div>
+                <p style={{fontSize:11,color:"#9ca3af",margin:"8px 0 0",textAlign:"center"}}>
+                  With {aiOpponentCount} opponent{aiOpponentCount>1?"s":""}, each gets a unique style
+                </p>
+              </div>
+
+              {/* Summary */}
+              <div style={{background:"#fef3c7",border:"2px solid #f59e0b",borderRadius:8,
+                padding:"8px 12px",marginBottom:16,fontSize:12,color:"#92400e"}}>
+                <strong>You vs {aiOpponentCount} AI</strong> — {DIFF_INFO[aiDifficulty].label} difficulty
+                {aiOpponentCount===1&&` • ${Object.values(PERS_INFO)[0].label} style`}
+              </div>
+
+              <button onClick={startAIGame} style={{
+                background:"linear-gradient(135deg,#14532d,#15803d)",
+                color:"#fff",border:"none",padding:"14px 0",borderRadius:10,
+                fontSize:16,fontWeight:"bold",cursor:"pointer",width:"100%",
+                boxShadow:"0 4px 14px rgba(20,83,45,0.4)",letterSpacing:0.5,
+              }}>
+                🎮 Play vs AI — Start Game
+              </button>
+            </>)}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   // ════════════════════════════════════════════════════════════
   // WAITING
@@ -2353,6 +2655,8 @@ export default function App() {
                   const space=SPACES[+id]; if(!space) return null;
                   const group=COLOR_GROUPS[space.color]||[];
                   const hasMonopoly=space.type==="property"&&group.every(sid=>props[sid]?.owner===myIdx);
+                  // Only allow building from side panel if on that exact property
+                  const playerOnThisProp = me && me.position===+id;
                   return (
                     <div key={id} style={{display:"flex",alignItems:"center",gap:5,
                       fontSize:10,padding:"3px 6px",borderRadius:4,
@@ -2362,7 +2666,7 @@ export default function App() {
                       <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{space.name}</span>
                       {hasMonopoly&&<span style={{fontSize:9,color:"#14532d",fontWeight:"bold"}}>MONO</span>}
                       <span>{prop.hotel?"🏨":prop.houses>0?"🏠".repeat(prop.houses):""}</span>
-                      {hasMonopoly&&!prop.hotel&&isMyTurn&&(
+                      {hasMonopoly&&!prop.hotel&&isMyTurn&&playerOnThisProp&&(
                         <button onClick={()=>buildHouse(+id)}
                           style={{fontSize:9,background:"#14532d",color:"#fff",border:"none",
                             padding:"1px 6px",borderRadius:4,cursor:"pointer"}}>
@@ -2457,21 +2761,25 @@ export default function App() {
         const selSpace   = SPACES[selectedSpace];
         if (!selSpace) return null;
         const selProp    = props[selectedSpace] ?? null;
-        // Check if current player owns it and can build
-        const isMyProp   = selProp && selProp.owner === myIdx;
-        const group      = COLOR_GROUPS[selSpace.color] || [];
+        const mePlayer   = rawPlayers[myIdx];
+        // ── BUG FIX 1: buy only if physically on the space ──
+        const playerIsOnSpace = mePlayer && mePlayer.position === selectedSpace;
+        // ── BUG FIX 2: build only on the specific landed space ──
+        const group       = COLOR_GROUPS[selSpace.color] || [];
         const hasMonopoly = selSpace.type==="property" && group.length > 0 &&
           group.every(id => props[id]?.owner === myIdx);
+        // Build only allowed on the exact space the player just landed on
+        const isMyLandedProp = selProp && selProp.owner === myIdx && playerIsOnSpace;
 
         const handleCardBuild = (spaceId) => {
-          if (!hasMonopoly) return;
+          // Extra guard: must be on this specific space
+          if (!isMyLandedProp || !hasMonopoly || spaceId !== selectedSpace) return;
           buildHouse(spaceId);
-          // keep card open so player sees updated state
         };
 
         const handleCardBuy = () => {
-          // Trigger the regular buy flow via modal
-          if (!isMyTurn || selProp) return;
+          // Must be on the space AND it must be unowned AND it must be my turn
+          if (!isMyTurn || selProp || !playerIsOnSpace) return;
           setSelectedSpace(null);
           pushState({...gameState, modal:{type:"buy", spaceId:selectedSpace, playerIdx:myIdx}});
         };
@@ -2484,9 +2792,10 @@ export default function App() {
             myIdx={myIdx}
             isMyTurn={isMyTurn}
             allProps={props}
+            playerIsOnSpace={playerIsOnSpace}
             onClose={() => setSelectedSpace(null)}
-            onBuild={handleCardBuild}
-            onBuy={selSpace.price && !selProp && isMyTurn ? handleCardBuy : null}
+            onBuild={isMyLandedProp && hasMonopoly ? handleCardBuild : null}
+            onBuy={selSpace.price && !selProp && isMyTurn && playerIsOnSpace ? handleCardBuy : null}
           />
         );
       })()}
