@@ -1622,6 +1622,60 @@ export default function App() {
 
   // ── AI turn trigger ──
   useEffect(()=>{
+    if (!gameState||gameState.status!=="playing"||!gameState.modal) return;
+    if (processing) return;
+
+    const players=safePlayers(gameState);
+    const curIdx=gameState.currentPlayer;
+    const cur=players[curIdx];
+    if (!cur||!cur.isAI||cur.bankrupt) return;
+
+    clearTimeout(aiTimerRef.current);
+    aiTimerRef.current=setTimeout(()=>{
+      const gs=gsRef.current;
+      if (!gs?.modal||gs.currentPlayer!==curIdx) return;
+
+      const modal=gs.modal;
+      const props=safeProps(gs);
+      const log=safeLog(gs);
+
+      if (modal.type==="steal") {
+        const stealable=Object.entries(props)
+          .filter(([,p])=>p&&p.owner!==curIdx)
+          .map(([id])=>+id);
+        if (stealable.length){
+          const targetId=stealable[Math.floor(Math.random()*stealable.length)];
+          log.unshift(`🤖 ${players[curIdx]?.token} stole ${SPACES[targetId]?.name}!`);
+          pushState({...gs,
+            properties:{...props,[targetId]:{...props[targetId],owner:curIdx}},
+            modal:null,log:log.slice(0,25)});
+          return;
+        }
+      }
+
+      if (modal.type==="swap") {
+        const mine=Object.entries(props).filter(([,p])=>p&&p.owner===curIdx).map(([id])=>+id);
+        const theirs=Object.entries(props).filter(([,p])=>p&&p.owner!==curIdx).map(([id])=>+id);
+        if (mine.length&&theirs.length){
+          const mySpaceId=mine[Math.floor(Math.random()*mine.length)];
+          const theirSpaceId=theirs[Math.floor(Math.random()*theirs.length)];
+          const myProp=props[mySpaceId],theirProp=props[theirSpaceId];
+          log.unshift(`🔄 🤖 ${players[curIdx]?.token} swapped ${SPACES[mySpaceId]?.name} ↔ ${SPACES[theirSpaceId]?.name}!`);
+          pushState({...gs,properties:{...props,
+            [mySpaceId]:{...myProp,owner:theirProp.owner},
+            [theirSpaceId]:{...theirProp,owner:curIdx}},
+            modal:null,log:log.slice(0,25)});
+          return;
+        }
+      }
+
+      pushState({...gs,modal:null});
+    },700);
+    return ()=>clearTimeout(aiTimerRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[gameState?.modal, gameState?.currentPlayer, gameState?.status, processing]);
+
+  useEffect(()=>{
     if (!gameState||gameState.status!=="playing") return;
     if (gameState.modal) return; // wait for modal to clear
     const s=safeSettings(gameState);
