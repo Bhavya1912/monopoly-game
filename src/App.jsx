@@ -101,22 +101,37 @@ const STYLE = `
 
   /* Responsive layout */
   .game-root {
-    min-height: 100vh; background: #14532d;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(34,197,94,0.16), transparent 44%),
+      radial-gradient(circle at 85% 0%, rgba(251,191,36,0.14), transparent 38%),
+      linear-gradient(180deg, #14532d 0%, #0f3f24 60%, #0b2f1b 100%);
     font-family: Georgia, serif;
     display: flex; flex-direction: column;
-    padding: 6px; gap: 6px; box-sizing: border-box;
+    padding: 10px; gap: 10px; box-sizing: border-box;
   }
   .game-layout {
-    display: flex; gap: 8px; align-items: flex-start; flex: 1; min-height: 0;
+    display: flex; gap: 10px; align-items: flex-start; flex: 1; min-height: 0;
   }
   .board-wrap {
     flex-shrink: 0; position: relative;
     overflow: visible;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 16px 32px rgba(0,0,0,0.22);
+    backdrop-filter: blur(2px);
   }
   .right-panel {
     display: flex; flex-direction: column;
     gap: 8px; flex: 1; min-width: 0;
     overflow-y: auto; max-height: 90vh;
+    background: rgba(15, 23, 42, 0.22);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
   }
   @media (max-width: 860px) {
     .game-layout { flex-direction: column; }
@@ -128,11 +143,17 @@ const STYLE = `
   .pill {
     cursor: pointer; padding: 6px 14px; border-radius: 20px;
     font-size: 13px; font-weight: 600;
-    border: 2px solid #d6d3d1; background: #fff; color: #44403c;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.85); color: #1f2937;
     transition: all 0.15s; white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.14);
   }
-  .pill.active { background: #14532d; color: #fff; border-color: #14532d; }
-  .pill:hover:not(.active) { border-color: #14532d; color: #14532d; }
+  .pill.active {
+    background: linear-gradient(180deg, #16a34a, #14532d);
+    color: #fff;
+    border-color: #166534;
+  }
+  .pill:hover:not(.active) { border-color: #16a34a; color: #14532d; transform: translateY(-1px); }
 
   /* Scrollbars */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -353,6 +374,30 @@ const COMMUNITY_CARDS = [
   { text:"Pay school fees of $50",                   action:(p)=>({...p,money:p.money-50}) },
   { text:"Consultancy fee — receive $25",            action:(p)=>({...p,money:p.money+25}) },
   { text:"Get Out of Jail Free — keep this card!",  action:(p)=>({...p,jailFreeCards:(p.jailFreeCards||0)+1}) },
+];
+
+
+const FREE_PARKING_EVENTS = [
+  {
+    title: "🎉 Free Parking Bonus!",
+    text: "Street Fair Revenue — collect an extra $100.",
+    amount: 100,
+  },
+  {
+    title: "🛠️ Board Maintenance Fee",
+    text: "City repairs levy — pay $75.",
+    amount: -75,
+  },
+  {
+    title: "🍀 Lucky Parking!",
+    text: "You found investor cash — collect an extra $150.",
+    amount: 150,
+  },
+  {
+    title: "💨 Quiet Stop",
+    text: "No extra event this time.",
+    amount: 0,
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1609,9 +1654,14 @@ export default function App() {
       finishTurn(players,undefined,(gs.freePot||0)+amt,null,false);
     } else if (space.type==="freeparking"){
       const pot=gs.freePot||0;
+      const event = FREE_PARKING_EVENTS[Math.floor(Math.random()*FREE_PARKING_EVENTS.length)];
+      const eventAmount = event?.amount || 0;
+      const totalAward = pot + eventAmount;
       log.unshift(`${player.token} collects Free Parking: $${pot}!`);
-      players[curIdx]={...player,money:player.money+pot};
-      finishTurn(players,undefined,0,null,false);
+      if (eventAmount>0) log.unshift(`${player.token} bonus event: +$${eventAmount}`);
+      if (eventAmount<0) log.unshift(`${player.token} setback event: -$${Math.abs(eventAmount)}`);
+      players[curIdx]={...player,money:player.money+totalAward};
+      finishTurn(players,undefined,0,{type:"notify",title:event.title,text:event.text},false);
     } else if (space.type==="chance"){
       const card=CHANCE_CARDS[Math.floor(Math.random()*CHANCE_CARDS.length)];
       log.unshift(`❓ Chance: ${card.text}`);
