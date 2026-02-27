@@ -376,6 +376,30 @@ const COMMUNITY_CARDS = [
   { text:"Get Out of Jail Free — keep this card!",  action:(p)=>({...p,jailFreeCards:(p.jailFreeCards||0)+1}) },
 ];
 
+
+const FREE_PARKING_EVENTS = [
+  {
+    title: "🎉 Free Parking Bonus!",
+    text: "Street Fair Revenue — collect an extra $100.",
+    amount: 100,
+  },
+  {
+    title: "🛠️ Board Maintenance Fee",
+    text: "City repairs levy — pay $75.",
+    amount: -75,
+  },
+  {
+    title: "🍀 Lucky Parking!",
+    text: "You found investor cash — collect an extra $150.",
+    amount: 150,
+  },
+  {
+    title: "💨 Quiet Stop",
+    text: "No extra event this time.",
+    amount: 0,
+  },
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1630,9 +1654,14 @@ export default function App() {
       finishTurn(players,undefined,(gs.freePot||0)+amt,null,false);
     } else if (space.type==="freeparking"){
       const pot=gs.freePot||0;
+      const event = FREE_PARKING_EVENTS[Math.floor(Math.random()*FREE_PARKING_EVENTS.length)];
+      const eventAmount = event?.amount || 0;
+      const totalAward = pot + eventAmount;
       log.unshift(`${player.token} collects Free Parking: $${pot}!`);
-      players[curIdx]={...player,money:player.money+pot};
-      finishTurn(players,undefined,0,null,false);
+      if (eventAmount>0) log.unshift(`${player.token} bonus event: +$${eventAmount}`);
+      if (eventAmount<0) log.unshift(`${player.token} setback event: -$${Math.abs(eventAmount)}`);
+      players[curIdx]={...player,money:player.money+totalAward};
+      finishTurn(players,undefined,0,{type:"notify",title:event.title,text:event.text},false);
     } else if (space.type==="chance"){
       const card=CHANCE_CARDS[Math.floor(Math.random()*CHANCE_CARDS.length)];
       log.unshift(`❓ Chance: ${card.text}`);
