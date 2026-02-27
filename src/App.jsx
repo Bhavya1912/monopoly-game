@@ -111,9 +111,10 @@ const STYLE = `
     padding: 10px; gap: 10px; box-sizing: border-box;
   }
   .game-layout {
-    display: flex; gap: 10px; align-items: flex-start; flex: 1; min-height: 0;
+    display: flex; gap: 10px; align-items: stretch; flex: 1; min-height: 0;
   }
   .board-wrap {
+    flex: 0 0 50%;
     flex-shrink: 0; position: relative;
     overflow: visible;
     background: rgba(255,255,255,0.06);
@@ -124,8 +125,27 @@ const STYLE = `
     backdrop-filter: blur(2px);
   }
   .right-panel {
+    flex: 0 0 50%;
+    display: flex;
+    gap: 10px;
+    min-width: 0;
+    min-height: 0;
+  }
+  .strategy-panel {
+    flex: 0 0 40%;
     display: flex; flex-direction: column;
-    gap: 8px; flex: 1; min-width: 0;
+    gap: 8px; min-width: 0;
+    overflow-y: auto; max-height: 90vh;
+    background: rgba(15, 23, 42, 0.22);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .details-panel {
+    flex: 0 0 60%;
+    display: flex; flex-direction: column;
+    gap: 8px; min-width: 0;
     overflow-y: auto; max-height: 90vh;
     background: rgba(15, 23, 42, 0.22);
     border: 1px solid rgba(255,255,255,0.14);
@@ -136,7 +156,8 @@ const STYLE = `
   @media (max-width: 860px) {
     .game-layout { flex-direction: column; }
     .board-wrap { width: 100%; overflow-x: auto; }
-    .right-panel { width: 100%; max-height: none; }
+    .right-panel { width: 100%; max-height: none; flex-direction: column; }
+    .strategy-panel, .details-panel { width: 100%; max-height: none; }
   }
 
   /* Settings pill buttons */
@@ -2826,7 +2847,8 @@ export default function App() {
         </div>
 
         {/* Right panel */}
-        <div className="right-panel" style={{flex:layoutFocus==="board"?"0 0 290px":"1 1 520px"}}>
+        <div className="right-panel" style={{flex:layoutFocus==="board"?"0 0 50%":"0 0 50%"}}>
+          <div className="strategy-panel">
 
           {/* Controls */}
           {me&&!me.bankrupt&&(
@@ -2944,7 +2966,9 @@ export default function App() {
               </div>
             </div>
           </div>
+          </div>
 
+          <div className="details-panel">
           {/* My Properties panel */}
           {myProps.length>0&&(
             <div style={{background:"#fefce8",border:"2px solid #a16207",borderRadius:8,padding:10}}>
@@ -3056,6 +3080,7 @@ export default function App() {
         </div>
       </div>
 
+      </div>
       {/* ── Property Card Modal (triggered by clicking any board space) ── */}
       {selectedSpace !== null && (() => {
         const selSpace   = SPACES[selectedSpace];
