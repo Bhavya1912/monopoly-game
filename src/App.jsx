@@ -101,22 +101,37 @@ const STYLE = `
 
   /* Responsive layout */
   .game-root {
-    min-height: 100vh; background: #14532d;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(34,197,94,0.16), transparent 44%),
+      radial-gradient(circle at 85% 0%, rgba(251,191,36,0.14), transparent 38%),
+      linear-gradient(180deg, #14532d 0%, #0f3f24 60%, #0b2f1b 100%);
     font-family: Georgia, serif;
     display: flex; flex-direction: column;
-    padding: 6px; gap: 6px; box-sizing: border-box;
+    padding: 10px; gap: 10px; box-sizing: border-box;
   }
   .game-layout {
-    display: flex; gap: 8px; align-items: flex-start; flex: 1; min-height: 0;
+    display: flex; gap: 10px; align-items: flex-start; flex: 1; min-height: 0;
   }
   .board-wrap {
     flex-shrink: 0; position: relative;
     overflow: visible;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 16px 32px rgba(0,0,0,0.22);
+    backdrop-filter: blur(2px);
   }
   .right-panel {
     display: flex; flex-direction: column;
     gap: 8px; flex: 1; min-width: 0;
     overflow-y: auto; max-height: 90vh;
+    background: rgba(15, 23, 42, 0.22);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
   }
   @media (max-width: 860px) {
     .game-layout { flex-direction: column; }
@@ -128,11 +143,17 @@ const STYLE = `
   .pill {
     cursor: pointer; padding: 6px 14px; border-radius: 20px;
     font-size: 13px; font-weight: 600;
-    border: 2px solid #d6d3d1; background: #fff; color: #44403c;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.85); color: #1f2937;
     transition: all 0.15s; white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.14);
   }
-  .pill.active { background: #14532d; color: #fff; border-color: #14532d; }
-  .pill:hover:not(.active) { border-color: #14532d; color: #14532d; }
+  .pill.active {
+    background: linear-gradient(180deg, #16a34a, #14532d);
+    color: #fff;
+    border-color: #166534;
+  }
+  .pill:hover:not(.active) { border-color: #16a34a; color: #14532d; transform: translateY(-1px); }
 
   /* Scrollbars */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
