@@ -101,22 +101,37 @@ const STYLE = `
 
   /* Responsive layout */
   .game-root {
-    min-height: 100vh; background: #14532d;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(34,197,94,0.16), transparent 44%),
+      radial-gradient(circle at 85% 0%, rgba(251,191,36,0.14), transparent 38%),
+      linear-gradient(180deg, #14532d 0%, #0f3f24 60%, #0b2f1b 100%);
     font-family: Georgia, serif;
     display: flex; flex-direction: column;
-    padding: 6px; gap: 6px; box-sizing: border-box;
+    padding: 10px; gap: 10px; box-sizing: border-box;
   }
   .game-layout {
-    display: flex; gap: 8px; align-items: flex-start; flex: 1; min-height: 0;
+    display: flex; gap: 10px; align-items: flex-start; flex: 1; min-height: 0;
   }
   .board-wrap {
     flex-shrink: 0; position: relative;
     overflow: visible;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 16px 32px rgba(0,0,0,0.22);
+    backdrop-filter: blur(2px);
   }
   .right-panel {
     display: flex; flex-direction: column;
     gap: 8px; flex: 1; min-width: 0;
     overflow-y: auto; max-height: 90vh;
+    background: rgba(15, 23, 42, 0.22);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
   }
   @media (max-width: 860px) {
     .game-layout { flex-direction: column; }
@@ -128,11 +143,17 @@ const STYLE = `
   .pill {
     cursor: pointer; padding: 6px 14px; border-radius: 20px;
     font-size: 13px; font-weight: 600;
-    border: 2px solid #d6d3d1; background: #fff; color: #44403c;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.85); color: #1f2937;
     transition: all 0.15s; white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.14);
   }
-  .pill.active { background: #14532d; color: #fff; border-color: #14532d; }
-  .pill:hover:not(.active) { border-color: #14532d; color: #14532d; }
+  .pill.active {
+    background: linear-gradient(180deg, #16a34a, #14532d);
+    color: #fff;
+    border-color: #166534;
+  }
+  .pill:hover:not(.active) { border-color: #16a34a; color: #14532d; transform: translateY(-1px); }
 
   /* Scrollbars */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -225,6 +246,34 @@ const STYLE = `
     padding: 10px 14px 0;
     border-top: 2px solid #1a1a1a;
     margin-top: 4px;
+  }
+
+  /* Analytics dashboard */
+  .analytics-panel {
+    background: #ecfeff;
+    border: 2px solid #0e7490;
+    border-radius: 10px;
+    padding: 10px;
+  }
+  .analytics-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    color: #155e75;
+    margin-bottom: 8px;
+  }
+  .analytics-card {
+    background: #ffffff;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 8px;
+  }
+  .meter-track {
+    height: 8px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    overflow: hidden;
   }
 `;
 
@@ -355,6 +404,30 @@ const COMMUNITY_CARDS = [
   { text:"Get Out of Jail Free — keep this card!",  action:(p)=>({...p,jailFreeCards:(p.jailFreeCards||0)+1}) },
 ];
 
+
+const FREE_PARKING_EVENTS = [
+  {
+    title: "🎉 Free Parking Bonus!",
+    text: "Street Fair Revenue — collect an extra $100.",
+    amount: 100,
+  },
+  {
+    title: "🛠️ Board Maintenance Fee",
+    text: "City repairs levy — pay $75.",
+    amount: -75,
+  },
+  {
+    title: "🍀 Lucky Parking!",
+    text: "You found investor cash — collect an extra $150.",
+    amount: 150,
+  },
+  {
+    title: "💨 Quiet Stop",
+    text: "No extra event this time.",
+    amount: 0,
+  },
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -374,6 +447,42 @@ const DEFAULT_SETTINGS = {
   targetAmount: 10000,
   aiPlayers:    [],  // array of player indices that are AI
 };
+
+const COLOR_LABELS = {
+  "#8B4513":"Brown", "#87CEEB":"Light Blue", "#FF69B4":"Pink", "#FFA500":"Orange",
+  "#FF0000":"Red", "#FFFF00":"Yellow", "#00FF00":"Green", "#0000FF":"Dark Blue",
+};
+
+const clamp = (v, min=0, max=100) => Math.max(min, Math.min(max, v));
+
+function estimateAssetValueForPlayer(playerId, props) {
+  return Object.entries(props||{}).reduce((sum,[sid,prop])=>{
+    if (!prop || prop.owner!==playerId) return sum;
+    const space = SPACES[+sid];
+    if (!space) return sum;
+    const base = space.price || 0;
+    const built = (space.houseCost || 0) * ((prop.houses||0) + (prop.hotel?5:0));
+    return sum + base + built;
+  },0);
+}
+
+function estimatePropertyRent(spaceId, prop, props) {
+  const space = SPACES[spaceId];
+  if (!space || !prop) return 0;
+  if (space.type === "railroad") {
+    const count=Object.entries(props).filter(([k,v])=>v&&v.owner===prop.owner&&SPACES[+k]?.type==="railroad").length;
+    return space.rent?.[Math.max(0,Math.min(count-1,3))] || 0;
+  }
+  if (space.type === "utility") return 28; // expected dice roll(7) * 4 baseline
+  if (space.type === "property") {
+    const group=COLOR_GROUPS[space.color]||[];
+    const monopoly=group.length>0&&group.every(id=>props[id]?.owner===prop.owner);
+    if (prop.hotel) return space.rent?.[5] || 0;
+    if ((prop.houses||0)>0) return space.rent?.[prop.houses] || 0;
+    return monopoly ? (space.rent?.[0]||0)*2 : (space.rent?.[0]||0);
+  }
+  return 0;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -1340,6 +1449,11 @@ export default function App() {
   // Property card viewer
   const [selectedSpace, setSelectedSpace] = useState(null);
 
+  // Analytics dashboard
+  const [wealthMode, setWealthMode]       = useState("net"); // net | assets
+  const [wealthHistory, setWealthHistory] = useState([]);
+  const [layoutFocus, setLayoutFocus]     = useState("board"); // board | panel
+
   const gsRef            = useRef(null);
   const myIdxRef         = useRef(null);
   const prevDiceRef      = useRef([1,1]);
@@ -1443,6 +1557,33 @@ export default function App() {
   useEffect(()=>{
     if (gameState?.modal) setSelectedSpace(null);
   },[gameState?.modal]);
+
+  const analyticsPlayersKey = gameState?.players?.map(p=>`${p?.money||0}-${p?.position||0}-${p?.bankrupt?1:0}`).join(",") || "";
+  const analyticsPropCount = gameState?.properties ? Object.keys(gameState.properties).length : 0;
+
+  // ── Wealth history tracker (real-time analytics) ──
+  useEffect(()=>{
+    if (screen!=="game" || !gameState) return;
+    const players=safePlayers(gameState);
+    const props=safeProps(gameState);
+    if (!players.length) return;
+    const topLog=(safeLog(gameState)[0]||"");
+    const marker = /BANKRUPT|rent|MONO|reached/i.test(topLog) ? topLog : "";
+    const point={
+      t: Date.now(),
+      key: `${gameState.turnStartTime||0}|${players.map(p=>`${p?.money||0}-${p?.position||0}-${p?.bankrupt?1:0}`).join("|")}|${Object.keys(props).length}|${topLog}`,
+      values: players.map((pl,i)=>({
+        id:i,
+        net:(pl?.money||0)+estimateAssetValueForPlayer(i, props),
+        assets:estimateAssetValueForPlayer(i, props),
+      })),
+      event: marker,
+    };
+    setWealthHistory(prev=>{
+      if (prev[prev.length-1]?.key===point.key) return prev;
+      return [...prev.slice(-19), point];
+    });
+  },[screen, gameState?.turnStartTime, analyticsPlayersKey, gameState?.log?.[0], analyticsPropCount]);
 
   // ── Target-win check ──
   useEffect(()=>{
@@ -1609,9 +1750,14 @@ export default function App() {
       finishTurn(players,undefined,(gs.freePot||0)+amt,null,false);
     } else if (space.type==="freeparking"){
       const pot=gs.freePot||0;
+      const event = FREE_PARKING_EVENTS[Math.floor(Math.random()*FREE_PARKING_EVENTS.length)];
+      const eventAmount = event?.amount || 0;
+      const totalAward = pot + eventAmount;
       log.unshift(`${player.token} collects Free Parking: $${pot}!`);
-      players[curIdx]={...player,money:player.money+pot};
-      finishTurn(players,undefined,0,null,false);
+      if (eventAmount>0) log.unshift(`${player.token} bonus event: +$${eventAmount}`);
+      if (eventAmount<0) log.unshift(`${player.token} setback event: -$${Math.abs(eventAmount)}`);
+      players[curIdx]={...player,money:player.money+totalAward};
+      finishTurn(players,undefined,0,{type:"notify",title:event.title,text:event.text},false);
     } else if (space.type==="chance"){
       const card=CHANCE_CARDS[Math.floor(Math.random()*CHANCE_CARDS.length)];
       log.unshift(`❓ Chance: ${card.text}`);
@@ -2120,7 +2266,8 @@ export default function App() {
     setIsLocalGame(false); setSelectedSpace(null);
   };
 
-  const CORNER=68, CELL=46;
+  const boardScale = layoutFocus==="board" ? 1.2 : 0.9;
+  const CORNER=Math.round(68*boardScale), CELL=Math.round(46*boardScale);
   const cols=[CORNER,...Array(9).fill(CELL),CORNER];
   const rows=[CORNER,...Array(9).fill(CELL),CORNER];
 
@@ -2464,6 +2611,70 @@ export default function App() {
   const myProps=Object.entries(props).filter(([,p])=>p&&p.owner===myIdx);
   const myPropIds=new Set(myProps.map(([id])=>+id));
 
+  const wealthSeries = wealthHistory.length ? wealthHistory : [{
+    values: rawPlayers.map((pl,i)=>({id:i,net:(pl?.money||0)+estimateAssetValueForPlayer(i,props),assets:estimateAssetValueForPlayer(i,props)})),
+    event: "",
+  }];
+  const seriesValues = wealthSeries.flatMap(pt=>pt.values.map(v=>wealthMode==="net"?v.net:v.assets));
+  const chartMin = Math.min(...seriesValues, 0);
+  const chartMax = Math.max(...seriesValues, 1);
+
+  const playerProbabilities = rawPlayers.map((pl, pid)=>{
+    if (!pl || pl.bankrupt) return { pid, chance: 0, progress: "Out" };
+    let bestChance = 0;
+    let bestProgress = "0/0";
+    Object.entries(COLOR_GROUPS).forEach(([color, ids])=>{
+      const owned = ids.filter(id=>props[id]?.owner===pid).length;
+      const blocked = ids.filter(id=>props[id] && props[id].owner!==pid).length;
+      const unowned = ids.length - owned - blocked;
+      const chance = clamp((owned/ids.length)*70 + (unowned/ids.length)*20 - (blocked/ids.length)*60);
+      if (chance > bestChance) {
+        bestChance = chance;
+        bestProgress = `${owned}/${ids.length} ${COLOR_LABELS[color]||"Set"}`;
+      }
+    });
+    return { pid, chance: Math.round(bestChance), progress: bestProgress };
+  });
+
+  const riskByPlayer = rawPlayers.map((pl,pid)=>{
+    if (!pl || pl.bankrupt) return { pid, risk: 100, label: "Critical" };
+    const cash = pl.money || 0;
+    let risk = cash < 150 ? 60 : cash < 300 ? 45 : cash < 600 ? 25 : 10;
+    const lookAhead = Array.from({length:8},(_,i)=>(pl.position+i+1)%40);
+    const maxUpcoming = Math.max(0,...lookAhead.map(id=>{
+      const prop=props[id];
+      if (!prop || prop.owner===pid) return 0;
+      return estimatePropertyRent(id, prop, props);
+    }));
+    risk += Math.min(35, maxUpcoming * 0.12);
+    const oppMono = Object.values(COLOR_GROUPS).filter(ids=>{
+      const owners = ids.map(id=>props[id]?.owner).filter(v=>v!==undefined);
+      return owners.length===ids.length && owners[0]!==pid;
+    }).length;
+    risk += oppMono * 8;
+    const assets = estimateAssetValueForPlayer(pid, props);
+    if (assets < 400) risk += 8;
+    const rounded = Math.round(clamp(risk));
+    const label = rounded<30?"Low":rounded<55?"Medium":rounded<75?"High":"Critical";
+    return { pid, risk: rounded, label };
+  });
+
+  const colorSetInsights = Object.entries(COLOR_GROUPS).map(([color,ids])=>{
+    const owner = props[ids[0]]?.owner;
+    const monopoly = owner!==undefined && ids.every(id=>props[id]?.owner===owner);
+    if (!monopoly) return null;
+    const rents = ids.map(id=>estimatePropertyRent(id, props[id], props));
+    const incomePotential = rents.reduce((a,b)=>a+b,0);
+    const upgrades = ids.reduce((n,id)=>n+(props[id]?.houses||0)+(props[id]?.hotel?5:0),0);
+    return { color, owner, ids, incomePotential, upgrades, topRent: Math.max(...rents,0) };
+  }).filter(Boolean).sort((a,b)=>b.incomePotential-a.incomePotential);
+
+  const dangerousZones = Object.entries(props).map(([id,prop])=>({
+    id:+id,
+    owner:prop?.owner,
+    rent:estimatePropertyRent(+id, prop, props),
+  })).filter(z=>z.rent>0).sort((a,b)=>b.rent-a.rent).slice(0,3);
+
   return (
     <div className="game-root">
 
@@ -2480,6 +2691,14 @@ export default function App() {
              gs_s.gameMode==="timed"?`⏱ ${gs_s.timedMinutes}min`:
              `🎯 $${(gs_s.targetAmount||10000).toLocaleString()}`}
           </span>
+          <button
+            onClick={()=>setLayoutFocus(prev=>prev==="board"?"panel":"board")}
+            className="pill"
+            style={{padding:"2px 8px",fontSize:10}}
+            title="Toggle board and side-panel emphasis"
+          >
+            {layoutFocus==="board"?"🧩 Board Focus":"📋 Panel Focus"}
+          </button>
         </div>
         {/* Player chips */}
         <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
@@ -2607,7 +2826,7 @@ export default function App() {
         </div>
 
         {/* Right panel */}
-        <div className="right-panel">
+        <div className="right-panel" style={{flex:layoutFocus==="board"?"0 0 290px":"1 1 520px"}}>
 
           {/* Controls */}
           {me&&!me.bankrupt&&(
@@ -2644,6 +2863,87 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* Real-time Analytics Dashboard */}
+          <div className="analytics-panel">
+            <div className="analytics-title">📊 STRATEGY DASHBOARD (LIVE)</div>
+
+            <div className="analytics-card">
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <div style={{fontSize:11,fontWeight:"bold",color:"#0f766e"}}>Wealth Growth</div>
+                <div style={{display:"flex",gap:4}}>
+                  <button className={`pill ${wealthMode==="net"?"active":""}`} onClick={()=>setWealthMode("net")} style={{padding:"2px 8px",fontSize:10}}>Net Worth</button>
+                  <button className={`pill ${wealthMode==="assets"?"active":""}`} onClick={()=>setWealthMode("assets")} style={{padding:"2px 8px",fontSize:10}}>Assets</button>
+                </div>
+              </div>
+              <svg width="100%" viewBox="0 0 300 110" style={{background:"#f8fafc",borderRadius:6,border:"1px solid #e2e8f0"}}>
+                {rawPlayers.map((p, pid)=>{
+                  if (!p) return null;
+                  const pts = wealthSeries.map((pt, idx)=>{
+                    const v = pt.values.find(x=>x.id===pid);
+                    const value = wealthMode==="net" ? (v?.net||0) : (v?.assets||0);
+                    const x = wealthSeries.length===1 ? 10 : 10 + (idx*(280/(wealthSeries.length-1)));
+                    const y = 100 - (((value-chartMin)/(chartMax-chartMin||1))*85);
+                    return `${x},${y}`;
+                  }).join(" ");
+                  return <polyline key={pid} points={pts} fill="none" stroke={PLAYER_COLORS[pid]} strokeWidth="2.4"/>;
+                })}
+                {wealthSeries.map((pt, idx)=>{
+                  if (!pt.event) return null;
+                  const x = wealthSeries.length===1 ? 10 : 10 + (idx*(280/(wealthSeries.length-1)));
+                  return <circle key={`ev-${idx}`} cx={x} cy="12" r="3" fill="#f59e0b"/>;
+                })}
+              </svg>
+              <div style={{fontSize:10,color:"#475569",marginTop:4}}>
+                Orange dots mark big moments like monopoly swings, bankruptcies, or heavy rent hits.
+              </div>
+            </div>
+
+            <div className="analytics-card">
+              <div style={{fontSize:11,fontWeight:"bold",color:"#0f766e",marginBottom:6}}>Monopoly Completion Chance</div>
+              {playerProbabilities.map(p=> (
+                <div key={`prob-${p.pid}`} style={{marginBottom:6}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:10}}>
+                    <span style={{color:PLAYER_COLORS[p.pid],fontWeight:"bold"}}>P{p.pid+1}</span>
+                    <span>{p.chance}% • {p.progress}</span>
+                  </div>
+                  <div className="meter-track"><div style={{width:`${p.chance}%`,height:"100%",background:PLAYER_COLORS[p.pid]}}/></div>
+                </div>
+              ))}
+            </div>
+
+            <div className="analytics-card">
+              <div style={{fontSize:11,fontWeight:"bold",color:"#0f766e",marginBottom:6}}>Bankruptcy Risk</div>
+              {riskByPlayer.map(r=>{
+                const c = r.risk<30?"#16a34a":r.risk<55?"#d97706":r.risk<75?"#ea580c":"#dc2626";
+                return (
+                  <div key={`risk-${r.pid}`} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,fontSize:10}}>
+                    <span style={{width:34,color:PLAYER_COLORS[r.pid],fontWeight:"bold"}}>P{r.pid+1}</span>
+                    <div style={{flex:1}} className="meter-track"><div style={{width:`${r.risk}%`,height:"100%",background:c}}/></div>
+                    <span style={{color:c,fontWeight:"bold",minWidth:52,textAlign:"right"}}>{r.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="analytics-card" style={{marginBottom:0}}>
+              <div style={{fontSize:11,fontWeight:"bold",color:"#0f766e",marginBottom:6}}>Strongest Sets & Danger Zones</div>
+              {colorSetInsights.length===0 ? (
+                <div style={{fontSize:10,color:"#64748b"}}>No complete monopoly set yet — trading and blocking are wide open.</div>
+              ) : (
+                <div style={{display:"flex",flexDirection:"column",gap:4,fontSize:10}}>
+                  {colorSetInsights.slice(0,2).map((set,idx)=>(
+                    <div key={`set-${idx}`} style={{padding:"4px 6px",border:"1px solid #dbeafe",borderRadius:6,background:"#f8fafc"}}>
+                      <strong style={{color:PLAYER_COLORS[set.owner]}}>P{set.owner+1}</strong> controls <strong>{COLOR_LABELS[set.color]||"Color"}</strong> • Potential ${set.incomePotential}/round • Upgrades {set.upgrades}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{marginTop:6,fontSize:10,color:"#475569"}}>
+                Danger zones: {dangerousZones.length?dangerousZones.map(z=>`${SPACES[z.id]?.name} ($${z.rent})`).join(" • "):"none yet"}
+              </div>
+            </div>
+          </div>
 
           {/* My Properties panel */}
           {myProps.length>0&&(
