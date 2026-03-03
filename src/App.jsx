@@ -97,6 +97,10 @@ export default function App() {
   const prevDiceRef = useRef([1, 1]);
   const prevPositionsRef = useRef(null);
   const aiTimerRef = useRef(null);
+  const playerPositionsKey = gameState?.players
+    ?.map((p) => `${p?.position ?? ""}`)
+    .join(",");
+  const latestLogEntry = gameState?.log?.[0] || "";
 
   gsRef.current = gameState;
   myIdxRef.current = myIdx;
@@ -207,11 +211,7 @@ export default function App() {
         animateSteps(p.id, prev, steps);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    gameState?.players?.map((p) => p?.position + "").join(","),
-    gameState?.status,
-  ]);
+  }, [playerPositionsKey, gameState?.status, gameState]);
 
   // ── Close property card when a game-modal appears ──
   useEffect(() => {
@@ -241,13 +241,7 @@ export default function App() {
       if (prev[prev.length - 1]?.key === point.key) return prev;
       return [...prev.slice(-19), point];
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    screen,
-    gameState?.turnStartTime,
-    gameState?.log?.[0],
-    gameState,
-  ]);
+  }, [screen, gameState?.turnStartTime, latestLogEntry, gameState]);
 
   // ── Target-win check ──
   useEffect(() => {
@@ -423,7 +417,7 @@ export default function App() {
   const isMyTurn = gameState && myIdx === gameState.currentPlayer;
 
   // ── Rent calculation ──
-  const calcRent = (space, prop, props, dice, attacker) => {
+  const calcRent = (space, prop, props, dice) => {
     const p2 = props && typeof props === "object" ? props : {};
     let rent = 0;
     if (space.type === "railroad") {
@@ -702,7 +696,7 @@ export default function App() {
           finishTurn(null, undefined, undefined, null, false);
           return;
         }
-        const rent = calcRent(space, prop, props, gs.dice, player);
+        const rent = calcRent(space, prop, props, gs.dice);
         log.unshift(
           `${player.token} pays $${rent} rent to ${players[prop.owner]?.token || "?"}`,
         );

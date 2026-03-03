@@ -9,29 +9,30 @@ export default function TurnTimer({
   onExpire,
   isMyTurn,
 }) {
-  const [remaining, setRemaining] = useState(limit);
+  const [now, setNow] = useState(() => Date.now());
   const expiredRef = useRef(false);
 
   useEffect(() => {
     expiredRef.current = false;
-    setRemaining(limit);
   }, [turnStartTime, limit]);
 
   useEffect(() => {
     if (!limit) return;
     const iv = setInterval(() => {
-      const left = Math.max(
-        0,
-        limit - Math.floor((Date.now() - turnStartTime) / 1000),
-      );
-      setRemaining(left);
-      if (left === 0 && !expiredRef.current) {
-        expiredRef.current = true;
-        if (isMyTurn) onExpire();
-      }
+      setNow(Date.now());
     }, 500);
     return () => clearInterval(iv);
-  }, [turnStartTime, limit, isMyTurn, onExpire]);
+  }, [turnStartTime, limit]);
+
+  const remaining = limit
+    ? Math.max(0, limit - Math.floor((now - turnStartTime) / 1000))
+    : 0;
+
+  useEffect(() => {
+    if (!limit || remaining !== 0 || expiredRef.current) return;
+    expiredRef.current = true;
+    if (isMyTurn) onExpire();
+  }, [limit, remaining, isMyTurn, onExpire]);
 
   if (!limit) return null;
   const pct = remaining / limit;

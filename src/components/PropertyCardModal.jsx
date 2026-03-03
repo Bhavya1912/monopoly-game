@@ -68,13 +68,6 @@ export default function PropertyCardModal({
     group.every((id) => allProps[id]?.owner === myIdx);
 
   const canAfford = me && space.houseCost && me.money >= space.houseCost;
-  const canBuild =
-    isMyTurn &&
-    isMine &&
-    space.type === "property" &&
-    !hasHotel &&
-    hasMonopoly &&
-    canAfford;
 
   const mortgage = space.price ? Math.floor(space.price / 2) : null;
   const currentLevel = hasHotel ? 5 : houses;
