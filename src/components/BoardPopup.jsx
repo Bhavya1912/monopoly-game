@@ -4,7 +4,7 @@ import { SPACES, PLAYER_COLORS, PLAYER_TOKENS } from "../constants";
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared button style helper
 // ─────────────────────────────────────────────────────────────────────────────
-export function btnStyle(bg, half = false) {
+function btnStyle(bg, half = false) {
     return {
         background: bg,
         color: "#fff",
