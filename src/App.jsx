@@ -46,7 +46,7 @@ import {
 import DieFace from "./components/DieFace";
 import BoardCell from "./components/BoardCell";
 import PropertyCardModal from "./components/PropertyCardModal";
-import BoardPopup, { btnStyle } from "./components/BoardPopup";
+import BoardPopup from "./components/BoardPopup";
 import TurnTimer from "./components/TurnTimer";
 import GameTimer from "./components/GameTimer";
 import SettingsModal from "./components/SettingsModal";
@@ -74,7 +74,7 @@ export default function App() {
   // AI mode config
   const [aiOpponentCount, setAiOpponentCount] = useState(1);
   const [aiDifficulty, setAiDifficulty] = useState("medium");
-  const [aiPersonality, setAiPersonality] = useState("aggressive");
+  const [aiPersonality] = useState("aggressive");
 
   // Animation state
   const [diceLanding, setDiceLanding] = useState(false);
@@ -218,15 +218,6 @@ export default function App() {
     if (gameState?.modal) setSelectedSpace(null);
   }, [gameState?.modal]);
 
-  const analyticsPlayersKey =
-    gameState?.players
-      ?.map(
-        (p) => `${p?.money || 0}-${p?.position || 0}-${p?.bankrupt ? 1 : 0}`,
-      )
-      .join(",") || "";
-  const analyticsPropCount = gameState?.properties
-    ? Object.keys(gameState.properties).length
-    : 0;
 
   // ── Wealth history tracker (real-time analytics) ──
   useEffect(() => {
@@ -250,12 +241,12 @@ export default function App() {
       if (prev[prev.length - 1]?.key === point.key) return prev;
       return [...prev.slice(-19), point];
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     screen,
     gameState?.turnStartTime,
-    analyticsPlayersKey,
     gameState?.log?.[0],
-    analyticsPropCount,
+    gameState,
   ]);
 
   // ── Target-win check ──
@@ -361,7 +352,7 @@ export default function App() {
   useEffect(() => {
     if (!gameState || gameState.status !== "playing") return;
     if (gameState.modal) return; // wait for modal to clear
-    const s = safeSettings(gameState);
+
     const cur = safePlayers(gameState)[gameState.currentPlayer];
     if (!cur || !cur.isAI || cur.bankrupt) return;
     if (processing) return;
@@ -678,7 +669,7 @@ export default function App() {
       if (!prop) {
         // AI auto-decides
         if (player.isAI) {
-          const shouldBuy = aiShouldBuy(player, space, props, players, gs);
+          const shouldBuy = aiShouldBuy(player, space, props);
           if (shouldBuy) {
             log.unshift(`🤖 ${player.token} bought ${space.name}!`);
             players[curIdx] = { ...player, money: player.money - space.price };
@@ -2454,7 +2445,7 @@ export default function App() {
   const myProps = Object.entries(props).filter(
     ([, p]) => p && p.owner === myIdx,
   );
-  const myPropIds = new Set(myProps.map(([id]) => +id));
+
 
   const wealthSeries = wealthHistory.length
     ? wealthHistory
