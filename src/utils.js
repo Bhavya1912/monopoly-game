@@ -85,6 +85,7 @@ export function freshGameState(
   aiConfigs = {},
 ) {
   return {
+    version: 0,
     players: Array.from({ length: playerCount }, (_, i) => ({
       id: i,
       money: 1500,
