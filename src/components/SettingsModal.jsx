@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DEFAULT_SETTINGS, PLAYER_TOKENS } from "../constants";
+import { PLAYER_TOKENS } from "../constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SettSection — Section wrapper with a title bar
@@ -12,6 +12,14 @@ function SettSection({ title, children }) {
       </div>
       {children}
     </div>
+  );
+}
+
+function Pill({ label, active, onClick }) {
+  return (
+    <button className={`pill${active ? " active" : ""}`} onClick={onClick}>
+      {label}
+    </button>
   );
 }
 
@@ -32,12 +40,6 @@ export default function SettingsModal({
   );
 
   const ls = (key, val) => setLocalSettings((p) => ({ ...p, [key]: val }));
-
-  const Pill = ({ label, active, onClick }) => (
-    <button className={`pill${active ? " active" : ""}`} onClick={onClick}>
-      {label}
-    </button>
-  );
 
   const apply = () => {
     onChange(localSettings);
@@ -71,6 +73,38 @@ export default function SettingsModal({
               />
             ))}
           </div>
+        </SettSection>
+
+        <SettSection title="🎉 Dynamic Rules">
+          <div className="flex gap-8 flex-wrap margin-bottom-10">
+            <Pill
+              label="📉 Dynamic Market"
+              active={!!localSettings.dynamicMarket}
+              onClick={() => ls("dynamicMarket", !localSettings.dynamicMarket)}
+            />
+            <Pill
+              label="🌐 Round Events"
+              active={!!localSettings.eventRounds}
+              onClick={() => ls("eventRounds", !localSettings.eventRounds)}
+            />
+          </div>
+          {localSettings.eventRounds && (
+            <div>
+              <p className="text-xs text-dim margin-0 margin-bottom-8">
+                Trigger global events every:
+              </p>
+              <div className="flex gap-8 flex-wrap">
+                {[3, 4, 5, 6].map((v) => (
+                  <Pill
+                    key={v}
+                    label={`${v} turns`}
+                    active={(localSettings.eventInterval || 4) === v}
+                    onClick={() => ls("eventInterval", v)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </SettSection>
 
         {/* AI Players */}
@@ -223,6 +257,8 @@ export default function SettingsModal({
             : localSettings.gameMode === "timed"
               ? `Timed ${localSettings.timedMinutes}min`
               : `Target $${(localSettings.targetAmount || 10000).toLocaleString()}`}
+          {` • ${localSettings.dynamicMarket ? "Dynamic market" : "Stable market"}`}
+          {` • ${localSettings.eventRounds ? `Events/${localSettings.eventInterval || 4} turns` : "No round events"}`}
         </div>
 
         <button
