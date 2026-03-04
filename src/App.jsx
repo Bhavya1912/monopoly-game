@@ -1621,7 +1621,6 @@ export default function App() {
   const targetBoardWidth = Math.max(280, (windowWidth - horizontalPadding) * widthRatio);
   const maxByHeight = Math.max(280, windowHeight * (isPhone ? 0.5 : 0.72));
   const boardPixelSize = Math.min(targetBoardWidth, maxByHeight);
-  const boardScale = boardPixelSize / baseBoardSize;
   const phoneScale = Math.max(0.48, Math.min(0.68, (windowWidth - 30) / baseBoardSize));
   const tabletScale = layoutFocus === "board" ? 0.86 : 0.76;
   const desktopScale = Math.max(
