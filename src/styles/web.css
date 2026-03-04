@@ -2,14 +2,14 @@
 @media (min-width: 1024px) {
     .game-layout {
         flex-direction: row;
-        align-items: stretch;
-        justify-content: flex-start;
+        align-items: center;
+        justify-content: center;
     }
 
     .board-wrap {
         flex: 0 0 auto;
-        width: auto;
-        max-width: 60%;
+        width: 50%;
+        max-width: 50vw;
     }
 
     .right-panel {

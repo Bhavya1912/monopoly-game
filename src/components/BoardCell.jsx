@@ -54,31 +54,21 @@ export default function BoardCell({
           className={`cell-owner-dot ${space.type === "property" ? "owner-dot-prop" : "owner-dot-other"}`}
         />
       )}
-      <div
-        className={`cell-name ${space.type === "property" ? "margin-top-8" : "margin-top-0"}`}
-      >
-        {shortName}
+      <div className="cell-name">{shortName}</div>
+      <div className="cell-price">{space.price ? `$${space.price}` : ""}</div>
+      <div className="cell-buildings">
+        {prop ? (prop.hotel ? "🏨" : "🏠".repeat(prop.houses || 0)) : ""}
       </div>
-      {space.price && (
-        <div className="cell-price">${space.price}</div>
-      )}
-      {prop && (
-        <div className="cell-buildings">
-          {prop.hotel ? "🏨" : "🏠".repeat(prop.houses || 0)}
-        </div>
-      )}
-      {here.length > 0 && (
-        <div className="cell-tokens">
-          {here.map((p) => (
-            <span
-              key={p.id}
-              className={`cell-token ${bouncingPlayer === p.id ? "token-bounce" : ""}`}
-            >
-              {p.token}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="cell-tokens">
+        {here.map((p) => (
+          <span
+            key={p.id}
+            className={`cell-token ${bouncingPlayer === p.id ? "token-bounce" : ""}`}
+          >
+            {p.token}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

@@ -94,12 +94,21 @@ export default function App() {
   const [wealthHistory, setWealthHistory] = useState([]);
   const [layoutFocus, setLayoutFocus] = useState("board"); // board | panel
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
   useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+      setWindowHeight(window.innerHeight);
+    };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (windowWidth >= 600 && mobileChatOpen) setMobileChatOpen(false);
+  }, [windowWidth, mobileChatOpen]);
 
   const gsRef = useRef(null);
   const myIdxRef = useRef(null);
@@ -1604,11 +1613,15 @@ export default function App() {
     setSelectedSpace(null);
   };
 
-  const boardScale = windowWidth < 600
-    ? 0.5
-    : windowWidth < 1024
-      ? (layoutFocus === "board" ? 0.8 : 0.7)
-      : (layoutFocus === "board" ? 1.0 : 0.8);
+  const baseBoardSize = 550;
+  const isPhone = windowWidth < 600;
+  const isTablet = windowWidth >= 600 && windowWidth < 1024;
+  const horizontalPadding = isPhone ? 22 : isTablet ? 32 : 40;
+  const widthRatio = isPhone || isTablet ? 1 : 0.5;
+  const targetBoardWidth = Math.max(280, (windowWidth - horizontalPadding) * widthRatio);
+  const maxByHeight = Math.max(280, windowHeight * (isPhone ? 0.5 : 0.72));
+  const boardPixelSize = Math.min(targetBoardWidth, maxByHeight);
+  const boardScale = boardPixelSize / baseBoardSize;
   const CORNER = Math.round(68 * boardScale),
     CELL = Math.round(46 * boardScale);
   const cols = [CORNER, ...Array(9).fill(CELL), CORNER];
@@ -2751,58 +2764,124 @@ export default function App() {
             </div>
 
             {/* Chat */}
-            <div className="chat-box">
-              <div className="chat-header">
-                💬 CHAT
-              </div>
-              <div className="chat-messages-scroll">
-                {chatMessages.length === 0 && (
-                  <div className="chart-desc text-center margin-top-12">
-                    Say hi! 👋
-                  </div>
-                )}
-                {chatMessages.map((msg, i) => {
-                  const isMe = msg.id === myIdx;
-                  return (
-                    <div
-                      key={i}
-                      className={`flex gap-3 align-end ${isMe ? "flex-reverse" : "flex-row"}`}
-                    >
-                      <span className="text-sm flex-shrink-0">
-                        {msg.token}
-                      </span>
-                      <div
-                        className={`chat-bubble ${isMe ? "chat-me" : "chat-them"}`}
-                      >
-                        {msg.text}
-                      </div>
+            {!isPhone && (
+              <div className="chat-box">
+                <div className="chat-header">
+                  💬 CHAT
+                </div>
+                <div className="chat-messages-scroll">
+                  {chatMessages.length === 0 && (
+                    <div className="chart-desc text-center margin-top-12">
+                      Say hi! 👋
                     </div>
-                  );
-                })}
-                <div ref={chatEndRef} />
+                  )}
+                  {chatMessages.map((msg, i) => {
+                    const isMe = msg.id === myIdx;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex gap-3 align-end ${isMe ? "flex-reverse" : "flex-row"}`}
+                      >
+                        <span className="text-sm flex-shrink-0">
+                          {msg.token}
+                        </span>
+                        <div
+                          className={`chat-bubble ${isMe ? "chat-me" : "chat-them"}`}
+                        >
+                          {msg.text}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={chatEndRef} />
+                </div>
+                <div className="chat-input-area">
+                  <input
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") sendChat();
+                    }}
+                    placeholder="Type..."
+                    maxLength={120}
+                    className="chat-input-field"
+                  />
+                  <button
+                    onClick={sendChat}
+                    disabled={!chatInput.trim()}
+                    className={`btn-chat-go ${chatInput.trim() ? "btn-success" : "btn-dim"}`}
+                  >
+                    ➤
+                  </button>
+                </div>
               </div>
-              <div className="chat-input-area">
-                <input
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") sendChat();
-                  }}
-                  placeholder="Type..."
-                  maxLength={120}
-                  className="chat-input-field"
-                />
-                <button
-                  onClick={sendChat}
-                  disabled={!chatInput.trim()}
-                  className={`btn-chat-go ${chatInput.trim() ? "btn-success" : "btn-dim"}`}
-                >
-                  ➤
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
+
+        {isPhone && (
+          <>
+            <button
+              className="chat-fab"
+              onClick={() => setMobileChatOpen((prev) => !prev)}
+            >
+              {mobileChatOpen ? "✕" : "💬"}
+            </button>
+
+            {mobileChatOpen && (
+              <div className="chat-mobile-sheet">
+                <div className="chat-header">
+                  💬 CHAT
+                </div>
+                <div className="chat-messages-scroll">
+                  {chatMessages.length === 0 && (
+                    <div className="chart-desc text-center margin-top-12">
+                      Say hi! 👋
+                    </div>
+                  )}
+                  {chatMessages.map((msg, i) => {
+                    const isMe = msg.id === myIdx;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex gap-3 align-end ${isMe ? "flex-reverse" : "flex-row"}`}
+                      >
+                        <span className="text-sm flex-shrink-0">
+                          {msg.token}
+                        </span>
+                        <div
+                          className={`chat-bubble ${isMe ? "chat-me" : "chat-them"}`}
+                        >
+                          {msg.text}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={chatEndRef} />
+                </div>
+                <div className="chat-input-area">
+                  <input
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") sendChat();
+                    }}
+                    placeholder="Type..."
+                    maxLength={120}
+                    className="chat-input-field"
+                  />
+                  <button
+                    onClick={sendChat}
+                    disabled={!chatInput.trim()}
+                    className={`btn-chat-go ${chatInput.trim() ? "btn-success" : "btn-dim"}`}
+                  >
+                    ➤
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         {/* ── Property Card Modal (triggered by clicking any board space) ── */}
         {selectedSpace !== null &&

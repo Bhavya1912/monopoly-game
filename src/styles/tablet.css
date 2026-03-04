@@ -5,7 +5,13 @@
         gap: 12px;
     }
 
+    .game-layout {
+        align-items: center;
+    }
+
     .board-wrap {
+        width: 100%;
+        max-width: 100%;
         padding: 8px;
     }
 
