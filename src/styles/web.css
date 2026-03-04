@@ -10,6 +10,8 @@
         flex: 0 0 auto;
         width: 50%;
         max-width: 50vw;
+        width: auto;
+        max-width: 40vw;
     }
 
     .right-panel {

@@ -1622,6 +1622,17 @@ export default function App() {
   const maxByHeight = Math.max(280, windowHeight * (isPhone ? 0.5 : 0.72));
   const boardPixelSize = Math.min(targetBoardWidth, maxByHeight);
   const boardScale = boardPixelSize / baseBoardSize;
+  const phoneScale = Math.max(0.48, Math.min(0.68, (windowWidth - 30) / baseBoardSize));
+  const tabletScale = layoutFocus === "board" ? 0.86 : 0.76;
+  const desktopScale = Math.max(
+    0.8,
+    Math.min(1.5, (windowWidth * 0.4) / baseBoardSize, (windowHeight * 0.78) / baseBoardSize),
+  );
+  const boardScale = isPhone
+    ? phoneScale
+    : isTablet
+      ? tabletScale
+      : (layoutFocus === "board" ? desktopScale : Math.max(0.8, desktopScale - 0.18));
   const CORNER = Math.round(68 * boardScale),
     CELL = Math.round(46 * boardScale);
   const cols = [CORNER, ...Array(9).fill(CELL), CORNER];
