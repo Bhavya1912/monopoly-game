@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ref, set, get, onValue, update } from "firebase/database";
+import { ref, set, onValue, update, runTransaction } from "firebase/database";
 
 // ─── Services ────────────────────────────────────────────────────────────────
 import { db } from "./services/firebase";
@@ -402,22 +402,38 @@ export default function App() {
   isLocalGameRef.current = isLocalGame;
 
   const pushState = useCallback(
-    (s) => {
+    (nextState) => {
       const safe = {
-        ...s,
+        ...nextState,
         properties:
-          s.properties && typeof s.properties === "object" ? s.properties : {},
-        log: Array.isArray(s.log) ? s.log : [],
-        dice: Array.isArray(s.dice) ? s.dice : [1, 1],
-        players: Array.isArray(s.players) ? s.players : [],
-        rolling: s.rolling ?? false,
+          nextState.properties && typeof nextState.properties === "object"
+            ? nextState.properties
+            : {},
+        log: Array.isArray(nextState.log) ? nextState.log : [],
+        dice: Array.isArray(nextState.dice) ? nextState.dice : [1, 1],
+        players: Array.isArray(nextState.players) ? nextState.players : [],
+        rolling: nextState.rolling ?? false,
       };
       if (isLocalGameRef.current) {
         // Local AI game: update state directly, return a resolved promise
-        setGameState(safe);
-        return Promise.resolve();
+        setGameState({ ...safe, version: (safe.version ?? 0) + 1 });
+        return Promise.resolve(true);
       }
-      return set(ref(db, `games/${roomCode}/state`), safe);
+
+      const baseVersion = gsRef.current?.version ?? 0;
+      const stateRef = ref(db, `games/${roomCode}/state`);
+      return runTransaction(
+        stateRef,
+        (current) => {
+          const currentVersion = current?.version ?? 0;
+          if (current && currentVersion !== baseVersion) return;
+          return {
+            ...safe,
+            version: currentVersion + 1,
+          };
+        },
+        { applyLocally: false },
+      ).then((res) => res.committed);
     },
     [roomCode],
   );
@@ -1416,23 +1432,49 @@ export default function App() {
 
   // ── Create / Join ──
   const createGame = async () => {
-    const code = generateCode();
+    let code = "";
+    let created = false;
+
+    for (let attempt = 0; attempt < 8 && !created; attempt++) {
+      const candidate = generateCode();
+      // Reserve room atomically; if it already exists, retry with another code.
+      const result = await runTransaction(
+        ref(db, `games/${candidate}`),
+        (current) => {
+          if (current) return;
+          return {
+            lobby: {
+              0: { id: 0, token: PLAYER_TOKENS[0], color: PLAYER_COLORS[0] },
+            },
+            state: {
+              version: 0,
+              hostPlayerCount: playerCount,
+              status: "waiting",
+              properties: {},
+              players: [],
+              log: [],
+              dice: [1, 1],
+              rolling: false,
+            },
+          };
+        },
+        { applyLocally: false },
+      );
+      if (result.committed) {
+        code = candidate;
+        created = true;
+      }
+    }
+
+    if (!created) {
+      setError("Could not create room right now. Please try again.");
+      return;
+    }
+
     setRoomCode(code);
     setIsHost(true);
     setMyIdx(0);
     myIdxRef.current = 0;
-    await set(ref(db, `games/${code}`), {
-      lobby: { 0: { id: 0, token: PLAYER_TOKENS[0], color: PLAYER_COLORS[0] } },
-      state: {
-        hostPlayerCount: playerCount,
-        status: "waiting",
-        properties: {},
-        players: [],
-        log: [],
-        dice: [1, 1],
-        rolling: false,
-      },
-    });
     setScreen("waiting");
   };
 
@@ -1443,39 +1485,52 @@ export default function App() {
       return;
     }
     setError("");
-    const snap = await get(ref(db, `games/${code}`));
-    if (!snap.exists()) {
+
+    let reservedIdx = -1;
+    const result = await runTransaction(
+      ref(db, `games/${code}`),
+      (current) => {
+        if (!current) return;
+
+        const lobbyCount = current.lobby ? Object.keys(current.lobby).length : 0;
+        const maxPlayers = current.state?.hostPlayerCount || 2;
+        if (lobbyCount >= maxPlayers) return;
+
+        const aiIndices = current.state?.settings?.aiPlayers || [];
+        let idx = -1;
+        for (let i = 0; i < maxPlayers; i++) {
+          if (!current.lobby?.[i] && !aiIndices.includes(i)) {
+            idx = i;
+            break;
+          }
+        }
+        if (idx === -1) return;
+
+        reservedIdx = idx;
+        return {
+          ...current,
+          lobby: {
+            ...(current.lobby || {}),
+            [idx]: { id: idx, token: PLAYER_TOKENS[idx], color: PLAYER_COLORS[idx] },
+          },
+        };
+      },
+      { applyLocally: false },
+    );
+
+    if (!result.snapshot.exists()) {
       setError("Room not found!");
       return;
     }
-    const data = snap.val();
-    const lobbyCount = data.lobby ? Object.keys(data.lobby).length : 0;
-    const maxPlayers = data.state?.hostPlayerCount || 2;
-    if (lobbyCount >= maxPlayers) {
-      setError("Room is full!");
-      return;
-    }
-    const aiIndices = data.state?.settings?.aiPlayers || [];
-    let idx = -1;
-    for (let i = 0; i < maxPlayers; i++) {
-      if (!data.lobby?.[i] && !aiIndices.includes(i)) {
-        idx = i;
-        break;
-      }
-    }
-
-    if (idx === -1) {
+    if (!result.committed || reservedIdx === -1) {
       setError("No available slots (Room is full or remaining slots are AI)");
       return;
     }
 
-    setMyIdx(idx);
-    myIdxRef.current = idx;
+    setMyIdx(reservedIdx);
+    myIdxRef.current = reservedIdx;
     setRoomCode(code);
     setIsHost(false);
-    await update(ref(db, `games/${code}/lobby`), {
-      [idx]: { id: idx, token: PLAYER_TOKENS[idx], color: PLAYER_COLORS[idx] },
-    });
     setScreen("waiting");
   };
 
