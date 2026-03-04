@@ -12,6 +12,7 @@ import {
   CHANCE_CARDS,
   COMMUNITY_CARDS,
   FREE_PARKING_EVENTS,
+  ROUND_EVENTS,
   PLAYER_COLORS,
   PLAYER_TOKENS,
   CELL_POSITIONS,
@@ -30,6 +31,8 @@ import {
   safeSettings,
   estimateAssetValueForPlayer,
   estimatePropertyRent,
+  marketGroupKey,
+  randomMarketModifiers,
   freshGameState,
 } from "./utils";
 
@@ -477,10 +480,48 @@ export default function App() {
             ? space.rent[0] * 2
             : space.rent[0];
     }
+    const marketKey = marketGroupKey(space);
+    const marketMod = marketKey
+      ? gsRef.current?.marketModifiers?.[marketKey] || 1
+      : 1;
+    rent = Math.max(1, Math.round(rent * marketMod));
     // Double rent effect on owner
     const owner = safePlayers(gsRef.current)[prop.owner];
     if ((owner?.doubleRentTurns || 0) > 0) rent *= 2;
     return rent;
+  };
+
+  const runRoundEvent = (players, props, freePot, log) => {
+    const evt = ROUND_EVENTS[Math.floor(Math.random() * ROUND_EVENTS.length)];
+    const nextPlayers = players.map((p) => ({ ...p }));
+    let nextFreePot = freePot || 0;
+
+    if (evt.type === "all_bonus") {
+      nextPlayers.forEach((p, idx) => {
+        if (!p || p.bankrupt) return;
+        nextPlayers[idx] = { ...p, money: p.money + evt.amount };
+      });
+    } else if (evt.type === "all_fee_to_pot") {
+      nextPlayers.forEach((p, idx) => {
+        if (!p || p.bankrupt) return;
+        nextPlayers[idx] = { ...p, money: p.money - evt.amount };
+        nextFreePot += evt.amount;
+      });
+    } else if (evt.type === "builders_bonus") {
+      const ownersWithBuilds = new Set(
+        Object.entries(props)
+          .filter(([, pr]) => pr && ((pr.houses || 0) > 0 || pr.hotel))
+          .map(([, pr]) => pr.owner),
+      );
+      ownersWithBuilds.forEach((ownerId) => {
+        const p = nextPlayers[ownerId];
+        if (!p || p.bankrupt) return;
+        nextPlayers[ownerId] = { ...p, money: p.money + evt.amount };
+      });
+    }
+
+    log.unshift(`${evt.title} ${evt.text}`);
+    return { nextPlayers, nextFreePot };
   };
 
   // ── Sell property (for bankruptcy prevention) ──
@@ -1291,13 +1332,39 @@ export default function App() {
     while (players[next]?.bankrupt) next = (next + 1) % players.length;
     const log = safeLog(gs);
     const isAI = players[next]?.isAI;
+    const settings = safeSettings(gs);
+    const wrappedRound = next <= gs.currentPlayer;
+    const nextTurnCount = (gs.turnCount || 1) + 1;
+    let nextPlayers = players.map((p) => (p ? { ...p } : p));
+    let nextFreePot = gs.freePot || 0;
+    let marketModifiers = gs.marketModifiers || randomMarketModifiers();
+
+    if (wrappedRound && settings.dynamicMarket) {
+      marketModifiers = randomMarketModifiers();
+      log.unshift("📉 Market shifted this round. Property rents were re-priced!");
+    }
+
+    if (
+      wrappedRound &&
+      settings.eventRounds &&
+      nextTurnCount % Math.max(2, settings.eventInterval || 4) === 0
+    ) {
+      const outcome = runRoundEvent(nextPlayers, safeProps(gs), nextFreePot, log);
+      nextPlayers = outcome.nextPlayers;
+      nextFreePot = outcome.nextFreePot;
+    }
+
     log.unshift(`▶ Player ${next + 1}${isAI ? " 🤖" : ""}'s turn`);
     pushState({
       ...gs,
+      players: nextPlayers,
       currentPlayer: next,
       rolled: false,
       doubleCount: 0,
       rolling: false,
+      freePot: nextFreePot,
+      marketModifiers,
+      turnCount: nextTurnCount,
       log: log.slice(0, 25),
       turnStartTime: Date.now(),
       modal: null,
@@ -1621,6 +1688,7 @@ export default function App() {
   const targetBoardWidth = Math.max(280, (windowWidth - horizontalPadding) * widthRatio);
   const maxByHeight = Math.max(280, windowHeight * (isPhone ? 0.5 : 0.72));
   const boardPixelSize = Math.min(targetBoardWidth, maxByHeight);
+  const adaptiveScale = boardPixelSize / baseBoardSize;
   const phoneScale = Math.max(0.48, Math.min(0.68, (windowWidth - 30) / baseBoardSize));
   const tabletScale = layoutFocus === "board" ? 0.86 : 0.76;
   const desktopScale = Math.max(
@@ -1628,10 +1696,13 @@ export default function App() {
     Math.min(1.5, (windowWidth * 0.4) / baseBoardSize, (windowHeight * 0.78) / baseBoardSize),
   );
   const boardScale = isPhone
-    ? phoneScale
+    ? Math.min(phoneScale, adaptiveScale)
     : isTablet
-      ? tabletScale
-      : (layoutFocus === "board" ? desktopScale : Math.max(0.8, desktopScale - 0.18));
+      ? Math.min(tabletScale, adaptiveScale)
+      : Math.min(
+        layoutFocus === "board" ? desktopScale : Math.max(0.8, desktopScale - 0.18),
+        adaptiveScale,
+      );
   const CORNER = Math.round(68 * boardScale),
     CELL = Math.round(46 * boardScale);
   const cols = [CORNER, ...Array(9).fill(CELL), CORNER];
