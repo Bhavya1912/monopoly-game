@@ -59,12 +59,14 @@
     cursor: pointer;
     position: relative;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: 1fr auto auto auto;
     align-items: center;
-    justify-content: center;
+    justify-items: center;
     background: #fff;
     transition: all 0.2s;
+    box-sizing: border-box;
+    padding: 2px 2px 4px;
 }
 
 .board-cell:hover {
@@ -102,33 +104,50 @@
 }
 
 .cell-name {
-    font-size: 8px;
+    font-size: clamp(7px, 1.05vw, 9px);
     font-weight: 800;
     text-align: center;
-    line-height: 1.1;
+    line-height: 1.15;
     color: #1f2937;
-    margin-top: 15%;
-    padding: 0 4px;
+    width: 100%;
+    min-height: 2.35em;
+    max-height: 2.35em;
+    padding: 0 3px;
     text-transform: uppercase;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    align-self: end;
 }
 
 .cell-price {
-    font-size: 7px;
+    font-size: clamp(6px, 0.95vw, 8px);
     font-weight: 700;
     color: #64748b;
-    margin-top: 2px;
+    min-height: 1.2em;
+    line-height: 1.2;
+}
+
+.cell-buildings {
+    min-height: 1.2em;
+    font-size: clamp(8px, 1vw, 11px);
+    line-height: 1;
 }
 
 .cell-tokens {
-    margin-top: auto;
+    min-height: 1.25em;
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    padding-bottom: 4px;
+    align-items: center;
+    gap: 1px;
+    width: 100%;
 }
 
 .cell-token {
-    font-size: 16px;
+    font-size: clamp(10px, 1.6vw, 16px);
     line-height: 1;
     transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
