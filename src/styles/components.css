@@ -20,6 +20,11 @@
     border-radius: 4px;
     padding: 1px;
     overflow: hidden;
+    grid-template-columns: var(--gtc);
+    grid-template-rows: var(--gtr);
+    width: max-content;
+    height: max-content;
+    aspect-ratio: 1 / 1;
 }
 
 .board-center {
@@ -451,7 +456,9 @@
 }
 
 .board-wrap {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     max-width: fit-content;
 }
 
