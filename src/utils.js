@@ -73,6 +73,24 @@ export function estimatePropertyRent(spaceId, prop, props) {
   return 0;
 }
 
+export function randomMarketModifiers() {
+  const modifiers = { railroad: 1, utility: 1 };
+  Object.keys(COLOR_GROUPS).forEach((color) => {
+    modifiers[color] = +(0.8 + Math.random() * 0.5).toFixed(2);
+  });
+  modifiers.railroad = +(0.85 + Math.random() * 0.4).toFixed(2);
+  modifiers.utility = +(0.85 + Math.random() * 0.4).toFixed(2);
+  return modifiers;
+}
+
+export function marketGroupKey(space) {
+  if (!space) return null;
+  if (space.type === "property") return space.color;
+  if (space.type === "railroad") return "railroad";
+  if (space.type === "utility") return "utility";
+  return null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Game state factory
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,6 +134,8 @@ export function freshGameState(
     modal: null,
     status: "playing",
     hostPlayerCount: playerCount,
+    turnCount: 1,
+    marketModifiers: randomMarketModifiers(),
     settings: { ...DEFAULT_SETTINGS, ...settings, aiPlayers },
     turnStartTime: Date.now(),
     gameStartTime: Date.now(),

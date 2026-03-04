@@ -467,6 +467,27 @@ export const FREE_PARKING_EVENTS = [
   { title: "💨 Quiet Stop", text: "No extra event this time.", amount: 0 },
 ];
 
+export const ROUND_EVENTS = [
+  {
+    title: "📈 Property Boom",
+    text: "Every active player receives a $75 investor dividend.",
+    type: "all_bonus",
+    amount: 75,
+  },
+  {
+    title: "🧾 Civic Audit",
+    text: "Every active player pays a $60 audit fee to Free Parking.",
+    type: "all_fee_to_pot",
+    amount: 60,
+  },
+  {
+    title: "🏗️ Build Subsidy",
+    text: "Players with houses or hotels collect a $120 city subsidy.",
+    type: "builders_bonus",
+    amount: 120,
+  },
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Player constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -489,6 +510,9 @@ export const DEFAULT_SETTINGS = {
   timedMinutes: 60,
   targetAmount: 10000,
   aiPlayers: [],
+  dynamicMarket: true,
+  eventRounds: true,
+  eventInterval: 4,
 };
 
 export const COLOR_LABELS = {
