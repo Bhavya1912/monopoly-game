@@ -26,17 +26,7 @@ export default function GameTimer({ gameStartTime, limitMinutes, onExpire }) {
   const s = remaining % 60;
 
   return (
-    <span
-      style={{
-        fontSize: 11,
-        fontWeight: "bold",
-        color: remaining < 60 ? "#dc2626" : "#14532d",
-        background: remaining < 60 ? "#fee2e2" : "#dcfce7",
-        padding: "2px 7px",
-        borderRadius: 10,
-        flexShrink: 0,
-      }}
-    >
+    <span className={remaining < 60 ? "timer-urgent" : "timer-normal"}>
       ⏱ {m}:{s.toString().padStart(2, "0")}
     </span>
   );

@@ -6,17 +6,8 @@ import { DEFAULT_SETTINGS, PLAYER_TOKENS } from "../constants";
 // ─────────────────────────────────────────────────────────────────────────────
 function SettSection({ title, children }) {
   return (
-    <div style={{ marginBottom: 18 }}>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: "bold",
-          color: "#14532d",
-          marginBottom: 8,
-          borderBottom: "2px solid #e7d9a0",
-          paddingBottom: 5,
-        }}
-      >
+    <div className="section-wrapper">
+      <div className="section-title-line">
         {title}
       </div>
       {children}
@@ -54,52 +45,15 @@ export default function SettingsModal({
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.6)",
-        zIndex: 200,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-      }}
-    >
-      <div
-        className="slide-in"
-        style={{
-          background: "#fefce8",
-          borderRadius: 16,
-          padding: "24px 28px",
-          maxWidth: 480,
-          width: "100%",
-          maxHeight: "88vh",
-          overflowY: "auto",
-          border: "4px solid #a16207",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 18,
-          }}
-        >
-          <h2 style={{ margin: 0, color: "#14532d", fontSize: 20 }}>
+    <div className="settings-overlay">
+      <div className="settings-card slide-in">
+        <div className="settings-header-box">
+          <h2 className="settings-title">
             ⚙️ Game Settings
           </h2>
           <button
             onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: 20,
-              cursor: "pointer",
-              color: "#78716c",
-            }}
+            className="settings-close"
           >
             ✕
           </button>
@@ -107,7 +61,7 @@ export default function SettingsModal({
 
         {/* Players */}
         <SettSection title="👥 Players">
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="flex gap-8 flex-wrap">
             {[2, 3, 4].map((n) => (
               <Pill
                 key={n}
@@ -121,10 +75,10 @@ export default function SettingsModal({
 
         {/* AI Players */}
         <SettSection title="🤖 AI Opponents">
-          <p style={{ fontSize: 12, color: "#78716c", margin: "0 0 8px" }}>
+          <p className="text-xs text-dim margin-0 margin-bottom-8">
             Select which player slots are AI-controlled:
           </p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="flex gap-8 flex-wrap">
             {Array.from({ length: playerCount - 1 }, (_, i) => i + 1).map(
               (idx) => {
                 const isAI = (localSettings.aiPlayers || []).includes(idx);
@@ -145,7 +99,7 @@ export default function SettingsModal({
               },
             )}
             {playerCount <= 2 && (
-              <span style={{ fontSize: 12, color: "#9ca3af" }}>
+              <span className="text-xs text-dim">
                 Add more players to enable AI
               </span>
             )}
@@ -154,7 +108,7 @@ export default function SettingsModal({
 
         {/* Turn Timer */}
         <SettSection title="⏳ Turn Timer">
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="flex gap-8 flex-wrap">
             {[
               [0, "No Timer"],
               [30, "30 sec"],
@@ -170,7 +124,7 @@ export default function SettingsModal({
             ))}
           </div>
           {localSettings.turnTimer > 0 && (
-            <p style={{ fontSize: 12, color: "#78716c", margin: "6px 0 0" }}>
+            <p className="settings-timer-note">
               Turn auto-rolls and ends if timer expires.
             </p>
           )}
@@ -178,14 +132,7 @@ export default function SettingsModal({
 
         {/* Game Mode */}
         <SettSection title="🏁 Game Mode">
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              marginBottom: 10,
-            }}
-          >
+          <div className="flex gap-8 flex-wrap margin-bottom-10">
             {[
               ["classic", "⚔️ Classic"],
               ["timed", "⏱ Timed"],
@@ -200,16 +147,16 @@ export default function SettingsModal({
             ))}
           </div>
           {localSettings.gameMode === "classic" && (
-            <p style={{ fontSize: 12, color: "#78716c", margin: 0 }}>
+            <p className="text-xs text-dim margin-0">
               Last player standing wins.
             </p>
           )}
           {localSettings.gameMode === "timed" && (
             <div>
-              <p style={{ fontSize: 12, color: "#78716c", margin: "0 0 8px" }}>
+              <p className="text-xs text-dim margin-0 margin-bottom-8">
                 Richest player when time runs out wins.
               </p>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div className="flex gap-8 flex-wrap">
                 {[
                   [30, "30 min"],
                   [60, "60 min"],
@@ -227,17 +174,10 @@ export default function SettingsModal({
           )}
           {localSettings.gameMode === "target" && (
             <div>
-              <p style={{ fontSize: 12, color: "#78716c", margin: "0 0 8px" }}>
+              <p className="text-xs text-dim margin-0 margin-bottom-8">
                 First to reach target net worth wins.
               </p>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
+              <div className="flex gap-8 flex-wrap align-center">
                 {[5000, 10000, 25000].map((amt) => (
                   <Pill
                     key={amt}
@@ -249,8 +189,8 @@ export default function SettingsModal({
                     }}
                   />
                 ))}
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 13, color: "#555" }}>Custom $:</span>
+                <div className="flex align-center gap-6">
+                  <span className="text-md text-dim">Custom $:</span>
                   <input
                     value={customTarget}
                     onChange={(e) => {
@@ -258,14 +198,7 @@ export default function SettingsModal({
                       setCustomTarget(v);
                       if (+v >= 1000) ls("targetAmount", +v);
                     }}
-                    style={{
-                      width: 80,
-                      padding: "5px 8px",
-                      borderRadius: 6,
-                      border: "2px solid #d6d3d1",
-                      fontSize: 13,
-                      outline: "none",
-                    }}
+                    className="settings-input"
                     placeholder="Amount"
                   />
                 </div>
@@ -275,18 +208,8 @@ export default function SettingsModal({
         </SettSection>
 
         {/* Summary */}
-        <div
-          style={{
-            background: "#f0fdf4",
-            border: "2px solid #bbf7d0",
-            borderRadius: 10,
-            padding: "10px 14px",
-            marginBottom: 16,
-            fontSize: 12,
-            color: "#333",
-          }}
-        >
-          <strong style={{ color: "#14532d" }}>Summary: </strong>
+        <div className="settings-summary">
+          <strong>Summary: </strong>
           {playerCount} players
           {(localSettings.aiPlayers || []).length > 0 &&
             ` (${localSettings.aiPlayers.length} AI)`}
@@ -304,18 +227,7 @@ export default function SettingsModal({
 
         <button
           onClick={apply}
-          style={{
-            background: "#14532d",
-            color: "#fff",
-            border: "none",
-            padding: "12px 0",
-            borderRadius: 10,
-            fontSize: 16,
-            fontWeight: "bold",
-            cursor: "pointer",
-            width: "100%",
-            letterSpacing: 1,
-          }}
+          className="btn-settings-apply"
         >
           ✓ Apply Settings
         </button>

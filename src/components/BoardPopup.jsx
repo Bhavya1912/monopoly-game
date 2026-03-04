@@ -2,24 +2,6 @@ import { useState } from "react";
 import { SPACES, PLAYER_COLORS, PLAYER_TOKENS } from "../constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared button style helper
-// ─────────────────────────────────────────────────────────────────────────────
-function btnStyle(bg, half = false) {
-    return {
-        background: bg,
-        color: "#fff",
-        border: "none",
-        padding: "9px 0",
-        borderRadius: 8,
-        fontSize: 14,
-        fontWeight: "bold",
-        cursor: "pointer",
-        width: half ? "50%" : "100%",
-        transition: "opacity 0.15s",
-    };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // SwapPanel (needs its own hooks, hence separate component)
 // ─────────────────────────────────────────────────────────────────────────────
 function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss }) {
@@ -33,40 +15,14 @@ function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss }) {
     );
 
     return (
-        <div
-            className="board-popup pop-in"
-            style={{
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%,-50%)",
-                position: "fixed",
-                zIndex: 100,
-                maxWidth: 300,
-                maxHeight: "80vh",
-                overflowY: "auto",
-            }}
-        >
-            <div
-                style={{
-                    fontWeight: "bold",
-                    fontSize: 14,
-                    color: "#14532d",
-                    marginBottom: 8,
-                }}
-            >
+        <div className="board-popup modal-pop modal-center modal-scrollable">
+            <div className="section-title">
                 🔄 Swap Properties
             </div>
-            <div style={{ fontSize: 12, marginBottom: 6, fontWeight: "bold" }}>
+            <div className="text-sm weight-bold margin-bottom-6">
                 Your property:
             </div>
-            <div
-                style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 3,
-                    marginBottom: 10,
-                }}
-            >
+            <div className="swap-list">
                 {myProps.map(([id]) => {
                     const s = SPACES[+id];
                     if (!s) return null;
@@ -74,31 +30,17 @@ function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss }) {
                         <button
                             key={id}
                             onClick={() => setMyPick(+id)}
-                            style={{
-                                padding: "4px 8px",
-                                border: `2px solid ${myPick === +id ? "#14532d" : "#d6d3d1"}`,
-                                borderRadius: 6,
-                                cursor: "pointer",
-                                fontSize: 12,
-                                background: myPick === +id ? "#dcfce7" : "#fff",
-                            }}
+                            className={`swap-item ${myPick === +id ? "selected-my" : ""}`}
                         >
                             {s.name}
                         </button>
                     );
                 })}
             </div>
-            <div style={{ fontSize: 12, marginBottom: 6, fontWeight: "bold" }}>
+            <div className="text-sm weight-bold margin-bottom-6">
                 Their property:
             </div>
-            <div
-                style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 3,
-                    marginBottom: 10,
-                }}
-            >
+            <div className="swap-list">
                 {theirProps.map(([id, p]) => {
                     const s = SPACES[+id];
                     if (!s) return null;
@@ -106,30 +48,23 @@ function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss }) {
                         <button
                             key={id}
                             onClick={() => setTheirPick(+id)}
-                            style={{
-                                padding: "4px 8px",
-                                border: `2px solid ${theirPick === +id ? PLAYER_COLORS[p.owner] : "#d6d3d1"}`,
-                                borderRadius: 6,
-                                cursor: "pointer",
-                                fontSize: 12,
-                                background:
-                                    theirPick === +id ? `${PLAYER_COLORS[p.owner]}22` : "#fff",
-                            }}
+                            className={`swap-item ${theirPick === +id ? "swap-item-styled" : ""}`}
+                            style={theirPick === +id ? { "--owner-color": PLAYER_COLORS[p.owner], "--owner-bg": `${PLAYER_COLORS[p.owner]}22` } : {}}
                         >
                             {s.name} ({rawPlayers[p.owner]?.token})
                         </button>
                     );
                 })}
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div className="flex-gap-8">
                 <button
                     onClick={() => myPick && theirPick && onSwap(myPick, theirPick)}
                     disabled={!myPick || !theirPick}
-                    style={btnStyle(!myPick || !theirPick ? "#9ca3af" : "#14532d", true)}
+                    className={`btn-action half ${!myPick || !theirPick ? "btn-gray-bg" : "btn-success-bg"}`}
                 >
                     Swap
                 </button>
-                <button onClick={onDismiss} style={btnStyle("#6b7280", true)}>
+                <button onClick={onDismiss} className="btn-action half btn-gray-bg">
                     Skip
                 </button>
             </div>
@@ -165,54 +100,30 @@ export default function BoardPopup({
         if (!player) return null;
         const hasCard = (player.jailFreeCards || 0) > 0;
         return (
-            <div
-                className="board-popup pop-in"
-                style={{
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%,-50%)",
-                    position: "fixed",
-                    zIndex: 100,
-                }}
-            >
-                <div style={{ fontSize: 22, textAlign: "center", marginBottom: 8 }}>
+            <div className="board-popup modal-pop modal-center">
+                <div className="emoji-large">
                     🔒
                 </div>
-                <div
-                    style={{
-                        fontWeight: "bold",
-                        fontSize: 14,
-                        textAlign: "center",
-                        marginBottom: 4,
-                        color: "#14532d",
-                    }}
-                >
+                <div className="section-title text-center margin-bottom-4">
                     You're in Jail!
                 </div>
-                <div
-                    style={{
-                        fontSize: 12,
-                        color: "#78716c",
-                        textAlign: "center",
-                        marginBottom: 12,
-                    }}
-                >
+                <div className="menu-subtitle text-center margin-bottom-12">
                     Turn {(player.jailTurns || 0) + 1}/3 — Choose an option:
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="flex-column gap-8">
                     {hasCard && (
-                        <button onClick={onUseJailCard} style={btnStyle("#7c3aed")}>
+                        <button onClick={onUseJailCard} className="btn-action btn-purple-bg">
                             🃏 Use Get Out of Jail Free Card
                         </button>
                     )}
                     <button
                         onClick={onPayJailFine}
                         disabled={player.money < 50}
-                        style={btnStyle(player.money >= 50 ? "#d97706" : "#9ca3af")}
+                        className={`btn-action ${player.money >= 50 ? "btn-warning-bg" : ""}`}
                     >
                         💰 Pay $50 Fine
                     </button>
-                    <button onClick={onJailRoll} style={btnStyle("#14532d")}>
+                    <button onClick={onJailRoll} className="btn-action btn-success-bg">
                         🎲 Roll for Doubles
                     </button>
                 </div>
@@ -227,80 +138,42 @@ export default function BoardPopup({
         const isMe = modal.playerIdx === myIdx;
         if (!space || !p) return null;
         return (
-            <div
-                className="board-popup pop-in"
-                style={{
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%,-50%)",
-                    position: "fixed",
-                    zIndex: 100,
-                }}
-            >
-                <div style={{ fontSize: 30, textAlign: "center", marginBottom: 4 }}>
+            <div className="board-popup modal-pop modal-center">
+                <div className="emoji-large">
                     🏠
                 </div>
-                <div
-                    style={{
-                        fontWeight: "bold",
-                        fontSize: 15,
-                        textAlign: "center",
-                        color: "#14532d",
-                        marginBottom: 2,
-                    }}
-                >
+                <div className="section-title text-center margin-bottom-2">
                     {space.name}
                 </div>
                 {space.color && (
                     <div
-                        style={{
-                            height: 8,
-                            background: space.color,
-                            borderRadius: 3,
-                            margin: "6px 0",
-                        }}
+                        className="color-bar"
+                        style={{ "--space-color": space.color }}
                     />
                 )}
-                <div style={{ fontSize: 13, textAlign: "center", margin: "6px 0" }}>
-                    Price: <strong>${space.price}</strong>
+                <div className="text-md text-center margin-bottom-10">
+                    Price: <strong className="weight-bold">${space.price}</strong>
                 </div>
                 {isMe ? (
                     <>
-                        <div
-                            style={{
-                                fontSize: 11,
-                                color: "#78716c",
-                                textAlign: "center",
-                                marginBottom: 10,
-                            }}
-                        >
+                        <div className="text-xs text-light text-center margin-bottom-10">
                             Your balance: ${p.money.toLocaleString()}
                         </div>
-                        <div style={{ display: "flex", gap: 8 }}>
+                        <div className="flex-gap-8">
                             <button
                                 onClick={onBuy}
                                 disabled={p.money < space.price}
-                                style={btnStyle(
-                                    p.money >= space.price ? "#14532d" : "#9ca3af",
-                                    true,
-                                )}
+                                className={`btn-action half ${p.money >= space.price ? "btn-success-bg" : ""}`}
                             >
                                 Buy ✓
                             </button>
-                            <button onClick={onPass} style={btnStyle("#dc2626", true)}>
+                            <button onClick={onPass} className="btn-action half btn-danger-bg">
                                 Pass ✗
                             </button>
                         </div>
                     </>
                 ) : (
-                    <p
-                        style={{
-                            fontSize: 12,
-                            color: "#78716c",
-                            textAlign: "center",
-                            margin: 0,
-                        }}
-                    >
+                    <p className="text-sm text-light text-center margin-0">
                         {p.token} P{p.id + 1} is deciding...
                     </p>
                 )}
@@ -316,61 +189,41 @@ export default function BoardPopup({
         const houses = prop.houses || 0;
         const canBuild = !prop.hotel && modal.canBuild;
         return (
-            <div
-                className="board-popup pop-in"
-                style={{
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%,-50%)",
-                    position: "fixed",
-                    zIndex: 100,
-                }}
-            >
-                <div
-                    style={{
-                        fontWeight: "bold",
-                        fontSize: 14,
-                        color: "#14532d",
-                        marginBottom: 6,
-                    }}
-                >
+            <div className="board-popup modal-pop modal-center">
+                <div className="section-title margin-bottom-4">
                     {space.name}
                 </div>
                 {space.color && (
                     <div
-                        style={{
-                            height: 8,
-                            background: space.color,
-                            borderRadius: 3,
-                            margin: "4px 0 8px",
-                        }}
+                        className="color-bar"
+                        style={{ "--space-color": space.color }}
                     />
                 )}
-                <div style={{ fontSize: 12, marginBottom: 8 }}>
+                <div className="text-sm margin-bottom-8">
                     {prop.hotel
                         ? "🏨 Hotel built"
                         : houses > 0
                             ? `🏠 × ${houses} houses`
                             : "No buildings yet"}
                 </div>
-                <div style={{ fontSize: 12, color: "#78716c", marginBottom: 10 }}>
+                <div className="text-sm text-light margin-bottom-10">
                     Build cost: ${space.houseCost}/house
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div className="flex-gap-8">
                     {canBuild && (
                         <button
                             onClick={() => onBuildHouse(modal.spaceId)}
-                            style={btnStyle("#14532d", true)}
+                            className="btn-action half btn-success-bg"
                         >
                             {houses >= 4 ? "🏨 Build Hotel" : "🏠 Build House"}
                         </button>
                     )}
-                    <button onClick={onDismiss} style={btnStyle("#6b7280", true)}>
+                    <button onClick={onDismiss} className="btn-action half btn-gray-bg">
                         Close
                     </button>
                 </div>
                 {!canBuild && (
-                    <p style={{ fontSize: 11, color: "#dc2626", margin: "8px 0 0" }}>
+                    <p className="text-xs text-danger margin-top-8">
                         {prop.hotel ? "Max level!" : "Need full color group first."}
                     </p>
                 )}
@@ -381,54 +234,22 @@ export default function BoardPopup({
     // Card (Chance / Community)
     if (modal.type === "card") {
         return (
-            <div
-                className="board-popup pop-in"
-                style={{
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%,-50%)",
-                    position: "fixed",
-                    zIndex: 100,
-                }}
-            >
-                <div style={{ fontSize: 28, textAlign: "center", marginBottom: 6 }}>
+            <div className="board-popup modal-pop modal-center">
+                <div className="emoji-large">
                     {modal.title?.startsWith("❓") ? "❓" : "📋"}
                 </div>
-                <div
-                    style={{
-                        fontWeight: "bold",
-                        color: "#14532d",
-                        fontSize: 14,
-                        textAlign: "center",
-                        marginBottom: 6,
-                    }}
-                >
+                <div className="section-title text-center margin-bottom-6">
                     {modal.title}
                 </div>
-                <p
-                    style={{
-                        fontStyle: "italic",
-                        fontSize: 13,
-                        textAlign: "center",
-                        color: "#292524",
-                        margin: "0 0 12px",
-                    }}
-                >
+                <p className="text-md text-center style-italic margin-bottom-12">
                     "{modal.text}"
                 </p>
                 {isMyTurn ? (
-                    <button onClick={onDismiss} style={btnStyle("#14532d")}>
+                    <button onClick={onDismiss} className="btn-action btn-success-bg">
                         OK
                     </button>
                 ) : (
-                    <p
-                        style={{
-                            fontSize: 11,
-                            color: "#78716c",
-                            textAlign: "center",
-                            margin: 0,
-                        }}
-                    >
+                    <p className="text-xs text-light text-center margin-0">
                         Waiting for current player...
                     </p>
                 )}
@@ -439,69 +260,36 @@ export default function BoardPopup({
     // Steal
     if (modal.type === "steal") {
         return (
-            <div
-                className="board-popup pop-in"
-                style={{
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%,-50%)",
-                    position: "fixed",
-                    zIndex: 100,
-                }}
-            >
-                <div
-                    style={{
-                        fontWeight: "bold",
-                        fontSize: 14,
-                        color: "#14532d",
-                        marginBottom: 8,
-                    }}
-                >
+            <div className="board-popup modal-pop modal-center">
+                <div className="section-title margin-bottom-8">
                     🃏 Steal a Property!
                 </div>
-                <p style={{ fontSize: 12, color: "#555", marginBottom: 12 }}>
+                <p className="text-sm text-dim margin-bottom-12">
                     Pick an opponent's property to take:
                 </p>
-                <div
-                    style={{
-                        maxHeight: 200,
-                        overflowY: "auto",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 4,
-                    }}
-                >
+                <div className="modal-scrollable">
                     {Object.entries(props).map(([id, p]) => {
                         if (!p || p.owner === myIdx) return null;
                         const space = SPACES[+id];
                         if (!space) return null;
+                        const ownerColor = PLAYER_COLORS[p.owner] || "#888";
                         return (
                             <button
                                 key={id}
                                 onClick={() => onSteal(+id)}
+                                className="property-item-row owner-styled-row"
                                 style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                    padding: "6px 10px",
-                                    background: `${PLAYER_COLORS[p.owner]}22`,
-                                    border: `1px solid ${PLAYER_COLORS[p.owner]}`,
-                                    borderRadius: 6,
-                                    cursor: "pointer",
-                                    fontSize: 12,
+                                    "--owner-bg": `${ownerColor}22`,
+                                    "--owner-border": ownerColor,
+                                    "--space-color": space.color
                                 }}
                             >
                                 {space.color && (
                                     <div
-                                        style={{
-                                            width: 8,
-                                            height: 8,
-                                            borderRadius: "50%",
-                                            background: space.color,
-                                        }}
+                                        className="static-dot rounded-full"
                                     />
                                 )}
-                                <span style={{ flex: 1, textAlign: "left" }}>{space.name}</span>
+                                <span className="flex-1 text-left">{space.name}</span>
                                 <span>{rawPlayers[p.owner]?.token}</span>
                             </button>
                         );
@@ -509,7 +297,7 @@ export default function BoardPopup({
                 </div>
                 <button
                     onClick={onDismiss}
-                    style={{ ...btnStyle("#6b7280"), marginTop: 8 }}
+                    className="btn-action btn-gray-bg margin-top-8"
                 >
                     Skip
                 </button>
@@ -533,36 +321,14 @@ export default function BoardPopup({
     // Notification
     if (modal.type === "notify") {
         return (
-            <div
-                className="board-popup pop-in"
-                style={{
-                    bottom: 16,
-                    right: 16,
-                    position: "fixed",
-                    zIndex: 100,
-                    maxWidth: 240,
-                    animation: "slideIn 0.2s ease-out",
-                }}
-            >
-                <div
-                    style={{
-                        fontSize: 13,
-                        color: "#14532d",
-                        fontWeight: "bold",
-                        marginBottom: 4,
-                    }}
-                >
+            <div className="board-popup modal-pop modal-notify modal-center">
+                <div className="section-title margin-bottom-4">
                     {modal.title}
                 </div>
-                <div style={{ fontSize: 12, color: "#555" }}>{modal.text}</div>
+                <div className="text-sm text-dim">{modal.text}</div>
                 <button
                     onClick={onDismiss}
-                    style={{
-                        ...btnStyle("#14532d"),
-                        marginTop: 8,
-                        fontSize: 11,
-                        padding: "4px 12px",
-                    }}
+                    className="btn-action btn-success-bg margin-top-8 text-xs padding-y-4 padding-x-12"
                 >
                     OK
                 </button>

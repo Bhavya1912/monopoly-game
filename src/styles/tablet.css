@@ -1,0 +1,24 @@
+/* 📠 TABLET VIEW (min-width: 600px) */
+@media (min-width: 600px) {
+    .game-root {
+        padding: 12px;
+        gap: 12px;
+    }
+
+    .board-wrap {
+        padding: 8px;
+    }
+
+    .right-panel {
+        flex-direction: row;
+        align-items: flex-start;
+    }
+
+    .strategy-panel {
+        flex: 0 0 45%;
+    }
+
+    .details-panel {
+        flex: 1;
+    }
+}

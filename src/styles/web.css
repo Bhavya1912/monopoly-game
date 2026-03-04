@@ -1,0 +1,30 @@
+/* 🌐 WEB VIEW (min-width: 1024px) */
+@media (min-width: 1024px) {
+    .game-layout {
+        flex-direction: row;
+        align-items: stretch;
+        justify-content: flex-start;
+    }
+
+    .board-wrap {
+        flex: 0 0 auto;
+        width: auto;
+        max-width: 60%;
+    }
+
+    .right-panel {
+        flex: 1;
+        flex-direction: row;
+        max-height: 90vh;
+    }
+
+    .strategy-panel {
+        flex: 0 0 40%;
+        overflow-y: auto;
+    }
+
+    .details-panel {
+        flex: 0 0 60%;
+        overflow-y: auto;
+    }
+}

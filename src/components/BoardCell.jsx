@@ -13,7 +13,7 @@ export default function BoardCell({
   bouncingPlayer,
 }) {
   const space = SPACES[spaceId];
-  if (!space) return <div style={{ width: "100%", height: "100%" }} />;
+  if (!space) return <div className="h-full w-full" />;
 
   const safeP = Array.isArray(players) ? players : [];
   const safeQ = properties && typeof properties === "object" ? properties : {};
@@ -23,26 +23,6 @@ export default function BoardCell({
 
   const ownerColor = prop ? PLAYER_COLORS[prop.owner] : null;
 
-  const bg =
-    space.type === "go"
-      ? "#bbf7d0"
-      : space.type === "jail"
-        ? "#fef9c3"
-        : space.type === "gotojail"
-          ? "#fee2e2"
-          : space.type === "freeparking"
-            ? "#dcfce7"
-            : space.type === "chance"
-              ? "#ffedd5"
-              : space.type === "community"
-                ? "#dbeafe"
-                : space.type === "tax"
-                  ? "#fce7f3"
-                  : space.type === "railroad"
-                    ? "#f5f5f5"
-                    : space.type === "utility"
-                      ? "#ecfdf5"
-                      : "#ffffff";
 
   const shortName = space.name
     .replace(/ Avenue$/i, "")
@@ -57,94 +37,42 @@ export default function BoardCell({
   return (
     <div
       onClick={onClick}
-      className={`board-cell-hover${isFlash ? " cell-pulse" : ""}`}
+      className={`board-cell board-cell-hover bg-${space.type} ${isFlash ? "cell-pulse" : ""} ${isSelected ? "cell-selected" : ""} ${!isSelected && ownerColor ? "has-owner" : ""}`}
       style={{
-        width: "100%",
-        height: "100%",
-        background: bg,
-        border: isSelected
-          ? "2px solid #fbbf24"
-          : ownerColor
-            ? `2px solid ${ownerColor}`
-            : "1px solid #9ca3af",
-        cursor: "pointer",
-        position: "relative",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 1,
-        boxShadow: isSelected
-          ? "inset 0 0 8px rgba(251,191,36,0.8)"
-          : ownerColor
-            ? `inset 0 0 5px ${ownerColor}55`
-            : "none",
-        transition: "box-shadow 0.15s",
+        "--owner-color": ownerColor,
+        "--owner-glow": ownerColor ? `${ownerColor}55` : "transparent",
+        "--space-color": space.color,
       }}
     >
       {/* Color band */}
       {space.type === "property" && space.color && (
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 7,
-            background: space.color,
-          }}
-        />
+        <div className="cell-color-band" />
       )}
       {/* Owner dot overlay */}
       {ownerColor && (
         <div
-          style={{
-            position: "absolute",
-            top: space.type === "property" ? 8 : 2,
-            right: 2,
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: ownerColor,
-            boxShadow: `0 0 3px ${ownerColor}`,
-          }}
+          className={`cell-owner-dot ${space.type === "property" ? "owner-dot-prop" : "owner-dot-other"}`}
         />
       )}
       <div
-        style={{
-          fontSize: 6,
-          fontWeight: 700,
-          textAlign: "center",
-          lineHeight: 1.2,
-          marginTop: space.type === "property" ? 8 : 0,
-          color: "#1f2937",
-          padding: "0 1px",
-        }}
+        className={`cell-name ${space.type === "property" ? "margin-top-8" : "margin-top-0"}`}
       >
         {shortName}
       </div>
       {space.price && (
-        <div style={{ fontSize: 5.5, color: "#6b7280" }}>${space.price}</div>
+        <div className="cell-price">${space.price}</div>
       )}
       {prop && (
-        <div style={{ fontSize: 7 }}>
+        <div className="cell-buildings">
           {prop.hotel ? "🏨" : "🏠".repeat(prop.houses || 0)}
         </div>
       )}
       {here.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-          }}
-        >
+        <div className="cell-tokens">
           {here.map((p) => (
             <span
               key={p.id}
-              className={bouncingPlayer === p.id ? "token-bounce" : ""}
-              style={{ fontSize: 12, lineHeight: 1, display: "inline-block" }}
+              className={`cell-token ${bouncingPlayer === p.id ? "token-bounce" : ""}`}
             >
               {p.token}
             </span>

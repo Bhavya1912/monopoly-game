@@ -39,31 +39,12 @@ export default function TurnTimer({
   const color = pct > 0.5 ? "#16a34a" : pct > 0.25 ? "#d97706" : "#dc2626";
 
   return (
-    <div
-      style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}
-    >
-      <div
-        style={{
-          flex: 1,
-          height: 5,
-          background: "#e5e7eb",
-          borderRadius: 3,
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: `${pct * 100}%`,
-            background: color,
-            transition: "width 0.5s linear",
-            borderRadius: 3,
-          }}
-        />
+    <div className="turn-timer-container" style={{ "--pct": `${pct * 100}%`, "--bar-color": color }}>
+      <div className="turn-timer-track">
+        <div className="turn-timer-bar" />
       </div>
       <span
-        className={remaining <= 10 ? "timer-low" : ""}
-        style={{ fontSize: 11, fontWeight: "bold", color, minWidth: 26 }}
+        className={`weight-bold text-xs timer-text ${remaining <= 10 ? "timer-low" : ""}`}
       >
         {remaining}s
       </span>

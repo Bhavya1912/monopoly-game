@@ -22,4 +22,6 @@ body,
 
 body {
   min-width: 320px;
+  zoom: 0.9;
+  /* Scale entire page — equivalent to 80% browser zoom */
 }

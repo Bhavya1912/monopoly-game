@@ -51,6 +51,8 @@ import TurnTimer from "./components/TurnTimer";
 import GameTimer from "./components/GameTimer";
 import SettingsModal from "./components/SettingsModal";
 
+import "./game.css";
+
 export default function App() {
   // ── State ──
   const [screen, setScreen] = useState("lobby");
@@ -91,6 +93,13 @@ export default function App() {
   const [wealthMode, setWealthMode] = useState("net"); // net | assets
   const [wealthHistory, setWealthHistory] = useState([]);
   const [layoutFocus, setLayoutFocus] = useState("board"); // board | panel
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const gsRef = useRef(null);
   const myIdxRef = useRef(null);
@@ -105,14 +114,6 @@ export default function App() {
   gsRef.current = gameState;
   myIdxRef.current = myIdx;
 
-  // Inject CSS once
-  useEffect(() => {
-    if (document.getElementById("mono-style")) return;
-    const el = document.createElement("style");
-    el.id = "mono-style";
-    el.textContent = STYLE;
-    document.head.appendChild(el);
-  }, []);
 
   // ── Firebase: game state ──
   useEffect(() => {
@@ -183,6 +184,13 @@ export default function App() {
     });
     return () => unsub();
   }, [screen, isHost, roomCode]);
+
+  // ── Sync settings for non-hosts ──
+  useEffect(() => {
+    if (gameState?.settings && !isHost) {
+      setSettings(gameState.settings);
+    }
+  }, [gameState?.settings, isHost]);
 
   // ── Position animation ──
   useEffect(() => {
@@ -1447,7 +1455,20 @@ export default function App() {
       setError("Room is full!");
       return;
     }
-    const idx = lobbyCount;
+    const aiIndices = data.state?.settings?.aiPlayers || [];
+    let idx = -1;
+    for (let i = 0; i < maxPlayers; i++) {
+      if (!data.lobby?.[i] && !aiIndices.includes(i)) {
+        idx = i;
+        break;
+      }
+    }
+
+    if (idx === -1) {
+      setError("No available slots (Room is full or remaining slots are AI)");
+      return;
+    }
+
     setMyIdx(idx);
     myIdxRef.current = idx;
     setRoomCode(code);
@@ -1528,7 +1549,11 @@ export default function App() {
     setSelectedSpace(null);
   };
 
-  const boardScale = layoutFocus === "board" ? 1.2 : 0.9;
+  const boardScale = windowWidth < 600
+    ? 0.5
+    : windowWidth < 1024
+      ? (layoutFocus === "board" ? 0.8 : 0.7)
+      : (layoutFocus === "board" ? 1.0 : 0.8);
   const CORNER = Math.round(68 * boardScale),
     CELL = Math.round(46 * boardScale);
   const cols = [CORNER, ...Array(9).fill(CELL), CORNER];
@@ -1575,58 +1600,23 @@ export default function App() {
       random: { label: "Random", emoji: "🎲", desc: "Unpredictable & chaotic" },
     };
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background:
-            "linear-gradient(145deg,#14532d 0%,#166534 50%,#15803d 100%)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "Georgia,serif",
-          padding: 16,
-        }}
-      >
-        <div
-          style={{
-            background: "#fefce8",
-            borderRadius: 20,
-            boxShadow: "0 24px 64px rgba(0,0,0,0.55)",
-            border: "4px solid #a16207",
-            maxWidth: 480,
-            width: "100%",
-            overflow: "hidden",
-          }}
-        >
+      <div className="screen-overlay">
+        <div className="menu-card">
           {/* Title */}
-          <div
-            style={{
-              textAlign: "center",
-              padding: "28px 32px 20px",
-              borderBottom: "2px solid #e7d9a0",
-            }}
-          >
-            <div style={{ fontSize: 60, lineHeight: 1, marginBottom: 6 }}>
+          <div className="menu-card-header">
+            <div className="emoji-large">
               🎲
             </div>
-            <h1
-              style={{
-                margin: "0 0 4px",
-                fontSize: 30,
-                letterSpacing: 4,
-                color: "#14532d",
-                fontFamily: "Georgia",
-              }}
-            >
+            <h1 className="menu-title">
               MONOPOLY
             </h1>
-            <p style={{ color: "#78716c", fontSize: 13, margin: 0 }}>
+            <p className="menu-subtitle">
               Online Multiplayer &amp; AI Mode
             </p>
           </div>
 
           {/* Mode tabs */}
-          <div style={{ display: "flex", borderBottom: "2px solid #e7d9a0" }}>
+          <div className="tab-container">
             {[
               ["multiplayer", "🌐 Multiplayer"],
               ["ai", "🤖 vs AI"],
@@ -1634,131 +1624,48 @@ export default function App() {
               <button
                 key={mode}
                 onClick={() => setLobbyMode(mode)}
-                style={{
-                  flex: 1,
-                  padding: "12px 0",
-                  fontSize: 14,
-                  fontWeight: "bold",
-                  border: "none",
-                  cursor: "pointer",
-                  background: lobbyMode === mode ? "#14532d" : "#fefce8",
-                  color: lobbyMode === mode ? "#fff" : "#78716c",
-                  borderBottom:
-                    lobbyMode === mode
-                      ? "3px solid #14532d"
-                      : "3px solid transparent",
-                  transition: "all 0.15s",
-                }}
+                className={`tab-button ${lobbyMode === mode ? "active" : ""}`}
               >
                 {label}
               </button>
             ))}
           </div>
 
-          <div style={{ padding: "24px 28px 28px" }}>
+          <div className="menu-card-body">
             {/* ── MULTIPLAYER TAB ── */}
             {lobbyMode === "multiplayer" && (
               <>
-                <div
-                  style={{
-                    marginBottom: 20,
-                    padding: 18,
-                    background: "#f0fdf4",
-                    borderRadius: 10,
-                    border: "2px solid #bbf7d0",
-                  }}
-                >
-                  <h3
-                    style={{
-                      margin: "0 0 10px",
-                      color: "#14532d",
-                      fontSize: 15,
-                    }}
-                  >
+                <div className="content-block">
+                  <h3 className="section-title">
                     🏠 Create a Game
                   </h3>
-                  <p
-                    style={{ fontSize: 12, color: "#555", margin: "0 0 10px" }}
-                  >
+                  <p className="label-text">
                     Number of Players
                   </p>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 10,
-                      justifyContent: "center",
-                      marginBottom: 14,
-                    }}
-                  >
+                  <div className="flex-center flex-gap-10 margin-bottom-14">
                     {[2, 3, 4].map((n) => (
                       <button
                         key={n}
                         onClick={() => setPlayerCount(n)}
-                        style={{
-                          width: 46,
-                          height: 46,
-                          borderRadius: "50%",
-                          fontSize: 17,
-                          fontWeight: "bold",
-                          border:
-                            playerCount === n
-                              ? "3px solid #14532d"
-                              : "2px solid #d4c89a",
-                          background: playerCount === n ? "#14532d" : "#fff",
-                          color: playerCount === n ? "#fff" : "#333",
-                          cursor: "pointer",
-                        }}
+                        className={`btn-ghost ${playerCount === n ? "active" : ""}`}
                       >
                         {n}
                       </button>
                     ))}
                   </div>
-                  <button
-                    onClick={createGame}
-                    style={{
-                      background: "#14532d",
-                      color: "#fff",
-                      border: "none",
-                      padding: "12px 0",
-                      borderRadius: 8,
-                      fontSize: 15,
-                      fontWeight: "bold",
-                      cursor: "pointer",
-                      width: "100%",
-                    }}
-                  >
+                  <button className="btn btn-primary" onClick={createGame}>
                     Create Game →
                   </button>
                 </div>
 
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    marginBottom: 16,
-                  }}
-                >
-                  <div style={{ flex: 1, height: 1, background: "#d6d3d1" }} />
-                  <span style={{ color: "#a8a29e", fontSize: 12 }}>OR</span>
-                  <div style={{ flex: 1, height: 1, background: "#d6d3d1" }} />
+                <div className="divider">
+                  <div className="divider-line" />
+                  <span className="divider-text">OR</span>
+                  <div className="divider-line" />
                 </div>
 
-                <div
-                  style={{
-                    padding: 18,
-                    background: "#eff6ff",
-                    borderRadius: 10,
-                    border: "2px solid #bfdbfe",
-                  }}
-                >
-                  <h3
-                    style={{
-                      margin: "0 0 10px",
-                      color: "#1e40af",
-                      fontSize: 15,
-                    }}
-                  >
+                <div className="content-block-alt">
+                  <h3 className="section-title">
                     🔗 Join a Game
                   </h3>
                   <input
@@ -1767,46 +1674,14 @@ export default function App() {
                     onKeyDown={(e) => e.key === "Enter" && joinGame()}
                     placeholder="Enter room code"
                     maxLength={6}
-                    style={{
-                      width: "100%",
-                      padding: "10px 14px",
-                      fontSize: 20,
-                      textAlign: "center",
-                      border: "2px solid #93c5fd",
-                      borderRadius: 8,
-                      fontFamily: "monospace",
-                      letterSpacing: 6,
-                      marginBottom: 10,
-                      outline: "none",
-                      fontWeight: "bold",
-                      boxSizing: "border-box",
-                    }}
+                    className="input-code"
                   />
                   {error && (
-                    <p
-                      style={{
-                        color: "#dc2626",
-                        fontSize: 12,
-                        margin: "0 0 8px",
-                      }}
-                    >
+                    <p className="error-text">
                       {error}
                     </p>
                   )}
-                  <button
-                    onClick={joinGame}
-                    style={{
-                      background: "#1e40af",
-                      color: "#fff",
-                      border: "none",
-                      padding: "12px 0",
-                      borderRadius: 8,
-                      fontSize: 15,
-                      fontWeight: "bold",
-                      cursor: "pointer",
-                      width: "100%",
-                    }}
-                  >
+                  <button className="btn btn-secondary btn-full" onClick={joinGame}>
                     Join Game →
                   </button>
                 </div>
@@ -1816,63 +1691,19 @@ export default function App() {
             {/* ── AI MODE TAB ── */}
             {lobbyMode === "ai" && (
               <>
-                <div
-                  style={{
-                    background: "#f0fdf4",
-                    borderRadius: 12,
-                    padding: 16,
-                    border: "2px solid #bbf7d0",
-                    marginBottom: 16,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "bold",
-                      color: "#14532d",
-                      marginBottom: 10,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
+                <div className="ai-config-box">
+                  <div className="ai-config-header">
                     🤖 <span>AI Opponents</span>
-                    <span
-                      style={{
-                        fontWeight: "normal",
-                        color: "#78716c",
-                        fontSize: 12,
-                      }}
-                    >
+                    <span className="text-light text-xs font-normal">
                       (you are always Player 1)
                     </span>
                   </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      justifyContent: "center",
-                    }}
-                  >
+                  <div className="ai-count-grid">
                     {[1, 2, 3].map((n) => (
                       <button
                         key={n}
                         onClick={() => setAiOpponentCount(n)}
-                        style={{
-                          flex: 1,
-                          padding: "10px 0",
-                          borderRadius: 8,
-                          fontSize: 13,
-                          fontWeight: "bold",
-                          border:
-                            aiOpponentCount === n
-                              ? "3px solid #14532d"
-                              : "2px solid #d4c89a",
-                          background:
-                            aiOpponentCount === n ? "#14532d" : "#fff",
-                          color: aiOpponentCount === n ? "#fff" : "#333",
-                          cursor: "pointer",
-                        }}
+                        className={`btn-ai-count ${aiOpponentCount === n ? "active" : "inactive"}`}
                       >
                         {n} AI{n > 1 ? "s" : ""}
                       </button>
@@ -1881,55 +1712,22 @@ export default function App() {
                 </div>
 
                 {/* Difficulty */}
-                <div style={{ marginBottom: 16 }}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "bold",
-                      color: "#14532d",
-                      marginBottom: 8,
-                    }}
-                  >
+                <div className="margin-bottom-16">
+                  <div className="ai-config-header margin-bottom-8">
                     🎯 Difficulty
                   </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 6,
-                    }}
-                  >
+                  <div className="grid-2">
                     {Object.entries(DIFF_INFO).map(
                       ([key, { label, emoji, desc }]) => (
                         <button
                           key={key}
                           onClick={() => setAiDifficulty(key)}
-                          style={{
-                            padding: "10px 12px",
-                            borderRadius: 8,
-                            fontSize: 12,
-                            fontWeight: "bold",
-                            border:
-                              aiDifficulty === key
-                                ? "3px solid #14532d"
-                                : "2px solid #d6d3d1",
-                            background:
-                              aiDifficulty === key ? "#dcfce7" : "#fff",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            lineHeight: 1.3,
-                          }}
+                          className={`card-button ${aiDifficulty === key ? "active" : ""}`}
                         >
-                          <div style={{ fontSize: 14, marginBottom: 2 }}>
+                          <div className="weight-bold margin-bottom-2">
                             {emoji} {label}
                           </div>
-                          <div
-                            style={{
-                              fontWeight: "normal",
-                              color: "#78716c",
-                              fontSize: 11,
-                            }}
-                          >
+                          <div className="text-light text-xs font-normal">
                             {desc}
                           </div>
                         </button>
@@ -1939,81 +1737,34 @@ export default function App() {
                 </div>
 
                 {/* Personality */}
-                <div style={{ marginBottom: 20 }}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "bold",
-                      color: "#14532d",
-                      marginBottom: 8,
-                    }}
-                  >
+                <div className="margin-bottom-20">
+                  <div className="section-title">
                     🎭 AI Play Style
-                    <span
-                      style={{
-                        fontWeight: "normal",
-                        color: "#78716c",
-                        fontSize: 11,
-                        marginLeft: 6,
-                      }}
-                    >
+                    <span className="text-light text-xs margin-left-6 font-normal">
                       (each AI gets a different style automatically)
                     </span>
                   </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 6,
-                    }}
-                  >
+                  <div className="grid-2">
                     {Object.entries(PERS_INFO).map(
                       ([key, { label, emoji, desc }]) => (
-                        <div
-                          key={key}
-                          style={{
-                            padding: "8px 10px",
-                            borderRadius: 8,
-                            fontSize: 11,
-                            border: "2px solid #e5e7eb",
-                            background: "#f9fafb",
-                            lineHeight: 1.3,
-                          }}
-                        >
-                          <div style={{ fontWeight: "bold", marginBottom: 2 }}>
+                        <div key={key} className="card-info">
+                          <div className="weight-bold margin-bottom-2">
                             {emoji} {label}
                           </div>
-                          <div style={{ color: "#78716c" }}>{desc}</div>
+                          <div className="text-light">{desc}</div>
                         </div>
                       ),
                     )}
                   </div>
-                  <p
-                    style={{
-                      fontSize: 11,
-                      color: "#9ca3af",
-                      margin: "8px 0 0",
-                      textAlign: "center",
-                    }}
-                  >
+                  <p className="text-light text-xs text-center margin-top-8">
                     With {aiOpponentCount} opponent
                     {aiOpponentCount > 1 ? "s" : ""}, each gets a unique style
                   </p>
                 </div>
 
                 {/* Summary */}
-                <div
-                  style={{
-                    background: "#fef3c7",
-                    border: "2px solid #f59e0b",
-                    borderRadius: 8,
-                    padding: "8px 12px",
-                    marginBottom: 16,
-                    fontSize: 12,
-                    color: "#92400e",
-                  }}
-                >
-                  <strong>You vs {aiOpponentCount} AI</strong> —{" "}
+                <div className="settings-summary-box">
+                  <strong className="text-success-dark">You vs {aiOpponentCount} AI</strong> —{" "}
                   {DIFF_INFO[aiDifficulty].label} difficulty
                   {aiOpponentCount === 1 &&
                     ` • ${Object.values(PERS_INFO)[0].label} style`}
@@ -2021,19 +1772,7 @@ export default function App() {
 
                 <button
                   onClick={startAIGame}
-                  style={{
-                    background: "linear-gradient(135deg,#14532d,#15803d)",
-                    color: "#fff",
-                    border: "none",
-                    padding: "14px 0",
-                    borderRadius: 10,
-                    fontSize: 16,
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                    width: "100%",
-                    boxShadow: "0 4px 14px rgba(20,83,45,0.4)",
-                    letterSpacing: 0.5,
-                  }}
+                  className="btn-play-ai"
                 >
                   🎮 Play vs AI — Start Game
                 </button>
@@ -2050,70 +1789,25 @@ export default function App() {
   // ════════════════════════════════════════════════════════════
   if (screen === "waiting") {
     const maxPlayers = gameState?.hostPlayerCount || playerCount;
+    const totalJoined = lobbyPlayers.length + (settings.aiPlayers || []).length;
+    const canStart = totalJoined >= maxPlayers;
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "linear-gradient(145deg,#14532d,#166534)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "Georgia,serif",
-          padding: 16,
-        }}
-      >
-        <div
-          style={{
-            background: "#fefce8",
-            borderRadius: 16,
-            padding: "36px 40px",
-            textAlign: "center",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
-            border: "4px solid #a16207",
-            maxWidth: 440,
-            width: "100%",
-          }}
-        >
-          <div style={{ fontSize: 44, marginBottom: 8 }}>⏳</div>
-          <h2 style={{ color: "#14532d", margin: "0 0 6px", fontSize: 20 }}>
+      <div className="screen-overlay">
+        <div className="menu-card text-center">
+          <div className="emoji-large">⏳</div>
+          <h2 className="section-title text-center">
             Waiting for Players
           </h2>
-          <p style={{ color: "#78716c", fontSize: 13, marginBottom: 20 }}>
+          <p className="menu-subtitle margin-bottom-20">
             {lobbyPlayers.length}/{maxPlayers} joined
           </p>
 
-          <div
-            style={{
-              background: "#14532d",
-              borderRadius: 10,
-              padding: "14px 24px",
-              marginBottom: 20,
-            }}
-          >
-            <p
-              style={{
-                color: "#86efac",
-                fontSize: 11,
-                margin: "0 0 4px",
-                letterSpacing: 2,
-              }}
-            >
-              ROOM CODE
-            </p>
-            <div
-              style={{
-                color: "#fff",
-                fontSize: 36,
-                fontWeight: 900,
-                letterSpacing: 10,
-                fontFamily: "monospace",
-              }}
-            >
+          <div className="room-code-box">
+            <p className="room-code-title">ROOM CODE</p>
+            <div className="room-code-text">
               {roomCode}
             </div>
-            <p style={{ color: "#86efac", fontSize: 11, margin: "6px 0 0" }}>
-              Share with friends
-            </p>
+            <p className="room-code-title margin-top-8">Share with friends</p>
           </div>
 
           {Array.from({ length: maxPlayers }, (_, i) => {
@@ -2122,26 +1816,13 @@ export default function App() {
             return (
               <div
                 key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  marginBottom: 6,
-                  background: p ? "#f0fdf4" : "#f5f5f4",
-                  border: p ? "2px solid #bbf7d0" : "2px dashed #d6d3d1",
-                }}
+                className={`player-waiting-row ${p ? "joined" : ""}`}
               >
-                <span style={{ fontSize: 20 }}>
+                <span className="text-xl">
                   {isAI ? "🤖" : p ? PLAYER_TOKENS[i] : "⬜"}
                 </span>
                 <span
-                  style={{
-                    fontWeight: "bold",
-                    color: p ? PLAYER_COLORS[i] : "#a8a29e",
-                    fontSize: 13,
-                  }}
+                  className={`weight-bold text-md player-${i}-text`}
                 >
                   {isAI
                     ? `P${i + 1} AI`
@@ -2152,13 +1833,7 @@ export default function App() {
                         : "Waiting..."}
                 </span>
                 {p && (
-                  <span
-                    style={{
-                      marginLeft: "auto",
-                      color: "#16a34a",
-                      fontSize: 12,
-                    }}
-                  >
+                  <span className="margin-left-auto text-sm text-success">
                     ✓
                   </span>
                 )}
@@ -2167,19 +1842,8 @@ export default function App() {
           })}
 
           {/* Settings summary */}
-          <div
-            style={{
-              background: "#f0fdf4",
-              border: "1px solid #bbf7d0",
-              borderRadius: 8,
-              padding: "8px 12px",
-              margin: "12px 0",
-              fontSize: 12,
-              color: "#555",
-              textAlign: "left",
-            }}
-          >
-            <strong style={{ color: "#14532d" }}>Settings: </strong>
+          <div className="settings-summary-box">
+            <strong className="text-success-dark">Settings: </strong>
             {settings.turnTimer
               ? `${settings.turnTimer}s timer`
               : "No timer"} •{" "}
@@ -2192,55 +1856,28 @@ export default function App() {
               ` • ${settings.aiPlayers.length} AI`}
           </div>
 
-          <div
-            style={{
-              marginTop: 8,
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
+          <div className="flex-column gap-6 margin-top-12">
             {isHost && (
-              <button
-                onClick={() => setShowSettings(true)}
-                style={{
-                  background: "#1e40af",
-                  color: "#fff",
-                  border: "none",
-                  padding: "11px 0",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
+              <button className="btn btn-secondary btn-full" onClick={() => setShowSettings(true)}>
                 ⚙️ Change Game Settings
               </button>
             )}
-            {isHost && lobbyPlayers.length >= 2 && (
+            {isHost && (
               <button
-                onClick={() => startGame(lobbyPlayers.length)}
-                style={{
-                  background: "#14532d",
-                  color: "#fff",
-                  border: "none",
-                  padding: "11px 0",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
+                className="btn btn-primary btn-full"
+                onClick={() => startGame(maxPlayers)}
+                disabled={!canStart}
               >
-                ▶ Start Game ({lobbyPlayers.length} players)
+                ▶ Start Game ({totalJoined} / {maxPlayers})
               </button>
             )}
-            {isHost && lobbyPlayers.length < 2 && (
-              <p style={{ color: "#78716c", fontSize: 13 }}>
-                Need at least 2 players to start
+            {isHost && !canStart && (
+              <p className="menu-subtitle margin-top-4 text-xs">
+                Waiting for {maxPlayers - totalJoined} more player{maxPlayers - totalJoined === 1 ? "" : "s"}...
               </p>
             )}
             {!isHost && (
-              <p style={{ color: "#78716c", fontSize: 13 }}>
+              <p className="menu-subtitle">
                 Waiting for host to start...
               </p>
             )}
@@ -2251,11 +1888,19 @@ export default function App() {
         {showSettings && isHost && (
           <SettingsModal
             settings={settings}
-            onChange={setSettings}
+            onChange={async (newS) => {
+              setSettings(newS);
+              if (roomCode) {
+                await update(ref(db, `games/${roomCode}/state`), {
+                  settings: newS,
+                  hostPlayerCount: playerCount, // keep synced
+                });
+              }
+            }}
             onClose={() => setShowSettings(false)}
             playerCount={playerCount}
             setPlayerCount={setPlayerCount}
-            maxPlayers={lobbyPlayers.length || playerCount}
+            maxPlayers={4}
           />
         )}
       </div>
@@ -2273,106 +1918,47 @@ export default function App() {
         ? alive.reduce((a, b) => (a.money > b.money ? a : b))
         : ps[0];
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "linear-gradient(145deg,#14532d,#15803d)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "Georgia,serif",
-          padding: 16,
-        }}
-      >
-        <div
-          style={{
-            background: "#fefce8",
-            borderRadius: 16,
-            padding: "40px 36px",
-            textAlign: "center",
-            border: "4px solid gold",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
-            maxWidth: 380,
-            width: "100%",
-          }}
-        >
-          <div style={{ fontSize: 80 }}>🏆</div>
-          <h2 style={{ fontSize: 28, color: "#14532d" }}>GAME OVER!</h2>
+      <div className="screen-overlay">
+        <div className="menu-card text-center winner-card">
+          <div className="winner-badge">🏆</div>
+          <h2 className="section-title text-center text-2xl">GAME OVER!</h2>
           {winner && (
             <>
-              <p style={{ fontSize: 20 }}>
+              <p className="winner-text">
                 {winner.token} Player {winner.id + 1}
                 {winner.isAI ? " 🤖" : ""} wins!
               </p>
-              <p style={{ color: "#333", fontWeight: "bold" }}>
+              <p className="weight-bold">
                 💰 ${winner.money.toLocaleString()}
               </p>
             </>
           )}
-          <div
-            style={{
-              marginTop: 16,
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
+          <div className="flex-column gap-6 margin-top-16">
             {ps
               .sort((a, b) => b.money - a.money)
               .map((p) => (
                 <div
                   key={p.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 12px",
-                    background: p.id === winner?.id ? "#dcfce7" : "#f5f5f4",
-                    borderRadius: 8,
-                    border:
-                      p.id === winner?.id
-                        ? "2px solid #14532d"
-                        : "1px solid #e5e7eb",
-                  }}
+                  className={`player-rank-row ${p.id === winner?.id ? "winner-row" : ""}`}
                 >
                   {p.id === winner?.id && <span>🏆</span>}
-                  <span style={{ fontSize: 20 }}>{p.token}</span>
+                  <span className="text-xl">{p.token}</span>
                   <span
-                    style={{ fontWeight: "bold", color: PLAYER_COLORS[p.id] }}
+                    className={`weight-bold player-${p.id}-text`}
                   >
                     P{p.id + 1}
                     {p.isAI ? " 🤖" : ""}
                   </span>
-                  <span
-                    style={{
-                      marginLeft: "auto",
-                      fontWeight: "bold",
-                      color: "#111",
-                    }}
-                  >
+                  <span className="margin-left-auto weight-bold">
                     ${p.money.toLocaleString()}
                   </span>
                   {p.bankrupt && (
-                    <span style={{ fontSize: 11, color: "#dc2626" }}>💸</span>
+                    <span className="text-xs">💸</span>
                   )}
                 </div>
               ))}
           </div>
-          <button
-            onClick={resetToLobby}
-            style={{
-              marginTop: 20,
-              background: "#14532d",
-              color: "#fff",
-              border: "none",
-              padding: "12px 32px",
-              borderRadius: 8,
-              fontSize: 15,
-              cursor: "pointer",
-              fontWeight: "bold",
-              width: "100%",
-            }}
-          >
+          <button className="btn btn-primary margin-top-20" onClick={resetToLobby}>
             Back to Lobby
           </button>
         </div>
@@ -2389,28 +1975,9 @@ export default function App() {
     gameState.players.length === 0
   ) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "#14532d",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            border: "4px solid #86efac",
-            borderTopColor: "transparent",
-            borderRadius: "50%",
-            animation: "spin 0.8s linear infinite",
-          }}
-        />
-        <div style={{ color: "#86efac", fontSize: 18, fontFamily: "Georgia" }}>
+      <div className="screen-overlay flex-column flex-center align-center gap-16">
+        <div className="spinner" />
+        <div className="text-md text-success weight-bold">
           Joining game...
         </div>
       </div>
@@ -2557,59 +2124,15 @@ export default function App() {
   return (
     <div className="game-root">
       {/* ── Header ── */}
-      <div
-        style={{
-          background: "#fefce8",
-          borderRadius: 8,
-          padding: "5px 12px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          border: "2px solid #a16207",
-          flexShrink: 0,
-          flexWrap: "wrap",
-          gap: 6,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: "bold",
-              letterSpacing: 2,
-              color: "#14532d",
-            }}
-          >
+      <div className="game-header">
+        <div className="flex-gap-8 align-center flex-wrap">
+          <span className="game-title-badge">
             🎲 MONOPOLY
           </span>
-          <span
-            style={{
-              fontSize: 10,
-              background: "#14532d",
-              color: "#fff",
-              padding: "2px 7px",
-              borderRadius: 10,
-              fontFamily: "monospace",
-            }}
-          >
+          <span className="room-badge">
             {roomCode}
           </span>
-          <span
-            style={{
-              fontSize: 10,
-              background: "#1e40af",
-              color: "#fff",
-              padding: "2px 7px",
-              borderRadius: 10,
-            }}
-          >
+          <span className="mode-badge">
             {gs_s.gameMode === "classic"
               ? "⚔️ Classic"
               : gs_s.gameMode === "timed"
@@ -2620,64 +2143,34 @@ export default function App() {
             onClick={() =>
               setLayoutFocus((prev) => (prev === "board" ? "panel" : "board"))
             }
-            className="pill"
-            style={{ padding: "2px 8px", fontSize: 10 }}
+            className="pill text-xs"
             title="Toggle board and side-panel emphasis"
           >
             {layoutFocus === "board" ? "🧩 Board Focus" : "📋 Panel Focus"}
           </button>
         </div>
         {/* Player chips */}
-        <div
-          style={{
-            display: "flex",
-            gap: 5,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
+        <div className="flex-gap-8 align-center flex-wrap">
           {rawPlayers.map((p, i) =>
             p ? (
               <div
                 key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  opacity: p.bankrupt ? 0.4 : 1,
-                  background:
-                    gameState.currentPlayer === i
-                      ? "#dcfce7"
-                      : i === myIdx
-                        ? "#fef9c3"
-                        : "#f9f5e8",
-                  border:
-                    gameState.currentPlayer === i
-                      ? "2px solid #14532d"
-                      : i === myIdx
-                        ? "2px solid #ca8a04"
-                        : "2px solid #e5e7eb",
-                  borderRadius: 6,
-                  padding: "2px 7px",
-                  transition: "background 0.3s",
-                }}
+                className={`player-chip ${gameState.currentPlayer === i ? "active-turn" : i === myIdx ? "current-player" : ""} ${p.bankrupt ? "bankrupt" : ""}`}
               >
-                <span style={{ fontSize: 14 }}>{p.token}</span>
-                <div>
+                <span className="text-md">{p.token}</span>
+                <div className="flex-column">
                   <div
-                    style={{ fontSize: 9, fontWeight: "bold", color: p.color }}
+                    className={`text-xs weight-bold player-${i}-text`}
                   >
                     P{i + 1}
                     {p.isAI ? " 🤖" : ""}
                     {i === myIdx ? " ★" : ""}
                   </div>
-                  <div
-                    style={{ fontSize: 9, color: "#111", fontWeight: "bold" }}
-                  >
+                  <div className="text-xs weight-bold text-black">
                     ${p.money.toLocaleString()}
                   </div>
                 </div>
-                {p.inJail && <span style={{ fontSize: 9 }}>🔒</span>}
+                {p.inJail && <span className="jail-icon">🔒</span>}
                 {(p.frozenTurns || 0) > 0 && (
                   <span className="frozen-badge">❄️{p.frozenTurns}</span>
                 )}
@@ -2685,9 +2178,9 @@ export default function App() {
                   <span className="immune-badge">🛡️</span>
                 )}
                 {(p.jailFreeCards || 0) > 0 && (
-                  <span style={{ fontSize: 9 }}>🃏×{p.jailFreeCards}</span>
+                  <span className="card-icon">🃏×{p.jailFreeCards}</span>
                 )}
-                {p.bankrupt && <span style={{ fontSize: 9 }}>💸</span>}
+                {p.bankrupt && <span className="bankrupt-icon">💸</span>}
               </div>
             ) : null,
           )}
@@ -2709,74 +2202,39 @@ export default function App() {
             />
           )}
         </div>
-        <button
-          onClick={resetToLobby}
-          style={{
-            background: "#dc2626",
-            color: "#fff",
-            border: "none",
-            padding: "4px 10px",
-            borderRadius: 4,
-            fontSize: 11,
-            cursor: "pointer",
-          }}
-        >
+        <button className="btn btn-danger text-xs" onClick={resetToLobby}>
           Leave
         </button>
       </div>
 
       {/* ── Turn banner ── */}
       <div
-        style={{
-          textAlign: "center",
-          fontSize: 12,
-          fontWeight: "bold",
-          color: isMyTurn ? "#86efac" : "#fca5a5",
-          padding: "1px 0",
-        }}
+        className={`banner-message ${isMyTurn ? (gameState.rolled ? "text-warning" : "text-success-light") : "text-danger-light"}`}
       >
         {isRolling
           ? `🎲 ${cur?.token || ""} P${(gameState.currentPlayer || 0) + 1}${cur?.isAI ? " 🤖" : ""} is rolling...`
           : isMyTurn
-            ? "✅ YOUR TURN — Roll the dice!"
+            ? gameState.rolled
+              ? "✅ Done! — End your turn →"
+              : "🎲 YOUR TURN — Roll the dice!"
             : `⏳ ${cur?.token || ""} P${(gameState.currentPlayer || 0) + 1}${cur?.isAI ? " 🤖" : ""}'s turn...`}
       </div>
 
       {/* ── Sell-to-pay banner ── */}
       {sellToPay && sellToPay.playerId === myIdx && (
-        <div
-          style={{
-            background: "#fee2e2",
-            border: "2px solid #dc2626",
-            borderRadius: 8,
-            padding: "8px 14px",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={{ fontSize: 13, fontWeight: "bold", color: "#dc2626" }}>
+        <div className="debt-banner">
+          <span className="text-md weight-bold text-danger">
             💸 You owe ${sellToPay.amount.toLocaleString()}! Sell properties to
             pay your debt:
           </span>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div className="flex-gap-6 flex-wrap">
             {myProps.map(([id]) => {
               const space = SPACES[+id];
               return (
                 <button
                   key={id}
+                  className="btn btn-danger text-xs"
                   onClick={() => sellProperty(+id)}
-                  style={{
-                    background: "#dc2626",
-                    color: "#fff",
-                    border: "none",
-                    padding: "4px 10px",
-                    borderRadius: 6,
-                    fontSize: 11,
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                  }}
                 >
                   Sell {space?.name} (${Math.floor((space?.price || 0) / 2)})
                 </button>
@@ -2785,16 +2243,8 @@ export default function App() {
           </div>
           {myProps.length === 0 && (
             <button
+              className="btn btn-danger text-xs"
               onClick={() => setSellToPay(null)}
-              style={{
-                background: "#dc2626",
-                color: "#fff",
-                border: "none",
-                padding: "4px 10px",
-                borderRadius: 6,
-                fontSize: 11,
-                cursor: "pointer",
-              }}
             >
               Declare Bankruptcy
             </button>
@@ -2807,19 +2257,18 @@ export default function App() {
         {/* Board */}
         <div className="board-wrap">
           <div
+            className="board-grid"
             style={{
-              display: "grid",
-              gridTemplateColumns: cols.map((w) => `${w}px`).join(" "),
-              gridTemplateRows: rows.map((h) => `${h}px`).join(" "),
-              gap: 1,
-              background: "#82b366",
-              border: "3px solid #4d7c0f",
-              borderRadius: 6,
-              padding: 1,
+              "--gtc": cols.map((w) => `${w}px`).join(" "),
+              "--gtr": rows.map((h) => `${h}px`).join(" "),
             }}
           >
             {CELL_POSITIONS.map(({ id, gridRow, gridColumn }) => (
-              <div key={id} style={{ gridRow, gridColumn, display: "flex" }}>
+              <div
+                key={id}
+                className="flex cell-container"
+                style={{ "--row": gridRow, "--col": gridColumn }}
+              >
                 <BoardCell
                   spaceId={id}
                   players={displayPlayers}
@@ -2835,45 +2284,14 @@ export default function App() {
               </div>
             ))}
             {/* Center */}
-            <div
-              style={{
-                gridRow: "2/11",
-                gridColumn: "2/11",
-                background: "#c8e6c9",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                borderRadius: 4,
-                position: "relative",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 20,
-                  fontWeight: 900,
-                  letterSpacing: 5,
-                  color: "#14532d",
-                  fontFamily: "Times New Roman",
-                  transform: "rotate(-35deg)",
-                  userSelect: "none",
-                }}
-              >
+            <div className="board-center">
+              <div className="board-title">
                 MONOPOLY
               </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#555",
-                  background: "#fff8",
-                  padding: "2px 8px",
-                  borderRadius: 4,
-                }}
-              >
+              <div className="free-parking-label">
                 🅿️ ${gameState.freePot || 0}
               </div>
-              <div style={{ display: "flex", gap: 12 }}>
+              <div className="flex-gap-12">
                 {diceArr.map((d, i) => (
                   <DieFace
                     key={i}
@@ -2884,7 +2302,7 @@ export default function App() {
                 ))}
               </div>
               {gs_s.turnTimer > 0 && isMyTurn && (
-                <div style={{ width: 100 }}>
+                <div className="timer-container">
                   <TurnTimer
                     turnStartTime={gameState.turnStartTime || Date.now()}
                     limit={gs_s.turnTimer}
@@ -2917,108 +2335,57 @@ export default function App() {
         </div>
 
         {/* Right panel */}
-        <div
-          className="right-panel"
-          style={{ flex: layoutFocus === "board" ? "0 0 50%" : "0 0 50%" }}
-        >
+        <div className="right-panel">
+
           <div className="strategy-panel">
             {/* Controls */}
             {me && !me.bankrupt && (
-              <div
-                style={{
-                  background: "#fefce8",
-                  border: "2px solid #a16207",
-                  borderRadius: 8,
-                  padding: 12,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 8,
-                  }}
-                >
-                  <span style={{ fontSize: 24 }}>{me.token}</span>
-                  <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        fontWeight: "bold",
-                        color: me.color,
-                        fontSize: 13,
-                      }}
-                    >
-                      You (P{myIdx + 1})
+              <div className="strategy-card-me">
+                <div className="strategy-me-header">
+                  <span className="text-xl">{me.token}</span>
+                  <div className="flex-1">
+                    <div className="flex-column">
+                      <div className="text-md weight-bold text-success">
+                        You (P{myIdx + 1})
+                      </div>
+                      <div className="text-sm weight-bold text-black">
+                        ${me.money.toLocaleString()}
+                      </div>
+                      {(me.jailFreeCards || 0) > 0 && (
+                        <div className="text-xs text-purple">
+                          🃏 Jail Free ×{me.jailFreeCards}
+                        </div>
+                      )}
+                      {(me.doubleRentTurns || 0) > 0 && (
+                        <div className="text-xs text-orange">
+                          💰 Double rent ×{me.doubleRentTurns}
+                        </div>
+                      )}
+                      {(me.rentImmuneTurns || 0) > 0 && (
+                        <div className="text-xs text-success-dark">
+                          🛡️ Rent immune
+                        </div>
+                      )}
+                      {(me.frozenTurns || 0) > 0 && (
+                        <div className="text-xs text-blue">
+                          ❄️ Frozen {me.frozenTurns} turn(s)
+                        </div>
+                      )}
                     </div>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "#111",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      ${me.money.toLocaleString()}
-                    </div>
-                    {(me.jailFreeCards || 0) > 0 && (
-                      <div style={{ fontSize: 10, color: "#7c3aed" }}>
-                        🃏 Jail Free ×{me.jailFreeCards}
-                      </div>
-                    )}
-                    {(me.doubleRentTurns || 0) > 0 && (
-                      <div style={{ fontSize: 10, color: "#d97706" }}>
-                        💰 Double rent ×{me.doubleRentTurns}
-                      </div>
-                    )}
-                    {(me.rentImmuneTurns || 0) > 0 && (
-                      <div style={{ fontSize: 10, color: "#16a34a" }}>
-                        🛡️ Rent immune
-                      </div>
-                    )}
-                    {(me.frozenTurns || 0) > 0 && (
-                      <div style={{ fontSize: 10, color: "#0284c7" }}>
-                        ❄️ Frozen {me.frozenTurns} turn(s)
-                      </div>
-                    )}
                   </div>
                   {me.inJail && (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        background: "#fef08a",
-                        padding: "2px 5px",
-                        borderRadius: 4,
-                      }}
-                    >
+                    <span className="jail-badge">
                       🔒 JAIL
                     </span>
                   )}
                 </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <div className="flex-gap-6 flex-wrap">
                   <button
                     onClick={handleRoll}
                     disabled={
                       !isMyTurn || gameState.rolled || processing || !!sellToPay
                     }
-                    style={{
-                      background:
-                        !isMyTurn || gameState.rolled || processing || sellToPay
-                          ? "#e5e7eb"
-                          : "#14532d",
-                      color:
-                        !isMyTurn || gameState.rolled || processing || sellToPay
-                          ? "#9ca3af"
-                          : "#fff",
-                      border: "none",
-                      padding: "8px 14px",
-                      borderRadius: 6,
-                      fontSize: 13,
-                      cursor:
-                        !isMyTurn || gameState.rolled || processing || sellToPay
-                          ? "default"
-                          : "pointer",
-                      fontWeight: "bold",
-                    }}
+                    className={`btn-roll ${(!isMyTurn || gameState.rolled || processing || sellToPay) ? "btn-dim" : "btn-success"}`}
                   >
                     🎲 Roll
                   </button>
@@ -3030,34 +2397,7 @@ export default function App() {
                       processing ||
                       !!sellToPay
                     }
-                    style={{
-                      background:
-                        !isMyTurn ||
-                          !gameState.rolled ||
-                          processing ||
-                          sellToPay
-                          ? "#e5e7eb"
-                          : "#dc2626",
-                      color:
-                        !isMyTurn ||
-                          !gameState.rolled ||
-                          processing ||
-                          sellToPay
-                          ? "#9ca3af"
-                          : "#fff",
-                      border: "none",
-                      padding: "8px 14px",
-                      borderRadius: 6,
-                      fontSize: 13,
-                      cursor:
-                        !isMyTurn ||
-                          !gameState.rolled ||
-                          processing ||
-                          sellToPay
-                          ? "default"
-                          : "pointer",
-                      fontWeight: "bold",
-                    }}
+                    className="btn-end"
                   >
                     End →
                   </button>
@@ -3072,35 +2412,20 @@ export default function App() {
               </div>
 
               <div className="analytics-card">
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 6,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: "bold",
-                      color: "#0f766e",
-                    }}
-                  >
+                <div className="row-between margin-bottom-6">
+                  <div className="card-title-tiny">
                     Wealth Growth
                   </div>
-                  <div style={{ display: "flex", gap: 4 }}>
+                  <div className="flex-gap-4">
                     <button
-                      className={`pill ${wealthMode === "net" ? "active" : ""}`}
+                      className={`pill text-xs ${wealthMode === "net" ? "active" : ""}`}
                       onClick={() => setWealthMode("net")}
-                      style={{ padding: "2px 8px", fontSize: 10 }}
                     >
                       Net Worth
                     </button>
                     <button
-                      className={`pill ${wealthMode === "assets" ? "active" : ""}`}
+                      className={`pill text-xs ${wealthMode === "assets" ? "active" : ""}`}
                       onClick={() => setWealthMode("assets")}
-                      style={{ padding: "2px 8px", fontSize: 10 }}
                     >
                       Assets
                     </button>
@@ -3109,11 +2434,7 @@ export default function App() {
                 <svg
                   width="100%"
                   viewBox="0 0 300 110"
-                  style={{
-                    background: "#f8fafc",
-                    borderRadius: 6,
-                    border: "1px solid #e2e8f0",
-                  }}
+                  className="chart-svg"
                 >
                   {rawPlayers.map((p, pid) => {
                     if (!p) return null;
@@ -3160,38 +2481,20 @@ export default function App() {
                     );
                   })}
                 </svg>
-                <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>
+                <div className="chart-desc">
                   Orange dots mark big moments like monopoly swings,
                   bankruptcies, or heavy rent hits.
                 </div>
               </div>
 
               <div className="analytics-card">
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: "bold",
-                    color: "#0f766e",
-                    marginBottom: 6,
-                  }}
-                >
+                <div className="card-title-tiny margin-bottom-6">
                   Monopoly Completion Chance
                 </div>
                 {playerProbabilities.map((p) => (
-                  <div key={`prob-${p.pid}`} style={{ marginBottom: 6 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        fontSize: 10,
-                      }}
-                    >
-                      <span
-                        style={{
-                          color: PLAYER_COLORS[p.pid],
-                          fontWeight: "bold",
-                        }}
-                      >
+                  <div key={`prob-${p.pid}`} className="margin-bottom-6">
+                    <div className="row-between text-xs">
+                      <span className={`weight-bold player-${p.pid}-text`}>
                         P{p.pid + 1}
                       </span>
                       <span>
@@ -3200,11 +2503,8 @@ export default function App() {
                     </div>
                     <div className="meter-track">
                       <div
-                        style={{
-                          width: `${p.chance}%`,
-                          height: "100%",
-                          background: PLAYER_COLORS[p.pid],
-                        }}
+                        className={`player-${p.pid}-bg h-full`}
+                        style={{ "--w": `${p.chance}%` }}
                       />
                     </div>
                   </div>
@@ -3212,62 +2512,30 @@ export default function App() {
               </div>
 
               <div className="analytics-card">
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: "bold",
-                    color: "#0f766e",
-                    marginBottom: 6,
-                  }}
-                >
+                <div className="risk-title">
                   Bankruptcy Risk
                 </div>
                 {riskByPlayer.map((r) => {
-                  const c =
+                  const riskClass =
                     r.risk < 30
-                      ? "#16a34a"
+                      ? "low"
                       : r.risk < 55
-                        ? "#d97706"
+                        ? "med"
                         : r.risk < 75
-                          ? "#ea580c"
-                          : "#dc2626";
+                          ? "high"
+                          : "crit";
                   return (
-                    <div
-                      key={`risk-${r.pid}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        marginBottom: 5,
-                        fontSize: 10,
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 34,
-                          color: PLAYER_COLORS[r.pid],
-                          fontWeight: "bold",
-                        }}
-                      >
+                    <div key={`risk-${r.pid}`} className="risk-row">
+                      <span className={`risk-player player-${r.pid}-text`}>
                         P{r.pid + 1}
                       </span>
-                      <div style={{ flex: 1 }} className="meter-track">
+                      <div className="flex-1 meter-track">
                         <div
-                          style={{
-                            width: `${r.risk}%`,
-                            height: "100%",
-                            background: c,
-                          }}
+                          className={`risk-${riskClass}-bg h-full`}
+                          style={{ "--w": `${r.risk}%` }}
                         />
                       </div>
-                      <span
-                        style={{
-                          color: c,
-                          fontWeight: "bold",
-                          minWidth: 52,
-                          textAlign: "right",
-                        }}
-                      >
+                      <span className={`risk-value risk-${riskClass}-text`}>
                         {r.label}
                       </span>
                     </div>
@@ -3275,53 +2543,31 @@ export default function App() {
                 })}
               </div>
 
-              <div className="analytics-card" style={{ marginBottom: 0 }}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: "bold",
-                    color: "#0f766e",
-                    marginBottom: 6,
-                  }}
-                >
+              <div className="analytics-card margin-0">
+                <div className="risk-title">
                   Strongest Sets & Danger Zones
                 </div>
                 {colorSetInsights.length === 0 ? (
-                  <div style={{ fontSize: 10, color: "#64748b" }}>
+                  <div className="text-xs text-dim">
                     No complete monopoly set yet — trading and blocking are wide
                     open.
                   </div>
                 ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                      fontSize: 10,
-                    }}
-                  >
+                  <div className="insight-list">
                     {colorSetInsights.slice(0, 2).map((set, idx) => (
-                      <div
-                        key={`set-${idx}`}
-                        style={{
-                          padding: "4px 6px",
-                          border: "1px solid #dbeafe",
-                          borderRadius: 6,
-                          background: "#f8fafc",
-                        }}
-                      >
-                        <strong style={{ color: PLAYER_COLORS[set.owner] }}>
+                      <div key={`set-${idx}`} className="insight-item">
+                        <strong className={`weight-bold player-${set.owner}-text`}>
                           P{set.owner + 1}
                         </strong>{" "}
                         controls{" "}
-                        <strong>{COLOR_LABELS[set.color] || "Color"}</strong> •
+                        <strong className="weight-bold">{COLOR_LABELS[set.color] || "Color"}</strong> •
                         Potential ${set.incomePotential}/round • Upgrades{" "}
                         {set.upgrades}
                       </div>
                     ))}
                   </div>
                 )}
-                <div style={{ marginTop: 6, fontSize: 10, color: "#475569" }}>
+                <div className="text-xs text-dim margin-top-6">
                   Danger zones:{" "}
                   {dangerousZones.length
                     ? dangerousZones
@@ -3336,35 +2582,11 @@ export default function App() {
           <div className="details-panel">
             {/* My Properties panel */}
             {myProps.length > 0 && (
-              <div
-                style={{
-                  background: "#fefce8",
-                  border: "2px solid #a16207",
-                  borderRadius: 8,
-                  padding: 10,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: "bold",
-                    color: "#14532d",
-                    marginBottom: 6,
-                    borderBottom: "1px solid #e7d9a0",
-                    paddingBottom: 4,
-                  }}
-                >
+              <div className="property-list-card">
+                <div className="property-list-title">
                   🏠 Your Properties
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 3,
-                    maxHeight: 130,
-                    overflowY: "auto",
-                  }}
-                >
+                <div className="property-list-scroll">
                   {myProps.map(([id, prop]) => {
                     const space = SPACES[+id];
                     if (!space) return null;
@@ -3377,48 +2599,19 @@ export default function App() {
                     return (
                       <div
                         key={id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 5,
-                          fontSize: 10,
-                          padding: "3px 6px",
-                          borderRadius: 4,
-                          background: hasMonopoly
-                            ? `${space.color}22`
-                            : "#f9f5e8",
-                          border: `1px solid ${space.color || "#e5e7eb"}`,
-                        }}
+                        className={`property-item-row ${hasMonopoly ? "has-monopoly" : "no-monopoly"}`}
+                        style={{ "--space-color": space.color }}
                       >
                         {space.color && (
                           <div
-                            style={{
-                              width: 7,
-                              height: 7,
-                              borderRadius: "50%",
-                              background: space.color,
-                              flexShrink: 0,
-                            }}
+                            className="color-dot"
                           />
                         )}
-                        <span
-                          style={{
-                            flex: 1,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <span className="flex-1 ellipsis">
                           {space.name}
                         </span>
                         {hasMonopoly && (
-                          <span
-                            style={{
-                              fontSize: 9,
-                              color: "#14532d",
-                              fontWeight: "bold",
-                            }}
-                          >
+                          <span className="mono-badge weight-bold">
                             MONO
                           </span>
                         )}
@@ -3435,15 +2628,7 @@ export default function App() {
                           playerOnThisProp && (
                             <button
                               onClick={() => buildHouse(+id)}
-                              style={{
-                                fontSize: 9,
-                                background: "#14532d",
-                                color: "#fff",
-                                border: "none",
-                                padding: "1px 6px",
-                                borderRadius: 4,
-                                cursor: "pointer",
-                              }}
+                              className="btn-build-plus"
                             >
                               +🏠
                             </button>
@@ -3456,36 +2641,12 @@ export default function App() {
             )}
 
             {/* All Properties */}
-            <div
-              style={{
-                background: "#fefce8",
-                border: "2px solid #a16207",
-                borderRadius: 8,
-                padding: 10,
-                overflowY: "auto",
-                maxHeight: 170,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: "bold",
-                  borderBottom: "1px solid #e7d9a0",
-                  paddingBottom: 4,
-                  marginBottom: 6,
-                }}
-              >
+            <div className="all-props-box">
+              <div className="property-list-title">
                 🗺️ All Properties
               </div>
               {Object.keys(props).length === 0 ? (
-                <div
-                  style={{
-                    color: "#bbb",
-                    fontSize: 11,
-                    textAlign: "center",
-                    padding: 8,
-                  }}
-                >
+                <div className="chart-desc text-center">
                   None sold yet
                 </div>
               ) : (
@@ -3493,40 +2654,22 @@ export default function App() {
                   if (!prop) return null;
                   const space = SPACES[+id];
                   if (!space) return null;
+                  const ownerColor = PLAYER_COLORS[prop.owner] || "#888";
                   return (
                     <div
                       key={id}
+                      className="property-item-row owner-styled-row"
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        fontSize: 10,
-                        padding: "2px 4px",
-                        borderRadius: 3,
-                        marginBottom: 2,
-                        background: `${PLAYER_COLORS[prop.owner] || "#888"}18`,
-                        border: `1px solid ${PLAYER_COLORS[prop.owner] || "#888"}44`,
+                        "--owner-bg": `${ownerColor}18`,
+                        "--owner-border": `${ownerColor}44`,
                       }}
                     >
                       {space.color && (
                         <div
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            background: space.color,
-                            flexShrink: 0,
-                          }}
+                          className="cell-owner-dot static-dot"
                         />
                       )}
-                      <span
-                        style={{
-                          flex: 1,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
+                      <span className="flex-1 ellipsis">
                         {space.name}
                       </span>
                       <span>{rawPlayers[prop.owner]?.token || "?"}</span>
@@ -3541,25 +2684,11 @@ export default function App() {
             </div>
 
             {/* Log */}
-            <div
-              style={{
-                background: "#0f172a",
-                borderRadius: 8,
-                padding: 10,
-                height: 100,
-                overflowY: "auto",
-                border: "2px solid #334155",
-                flexShrink: 0,
-              }}
-            >
+            <div className="game-log-box">
               {logArr.map((msg, i) => (
                 <div
                   key={i}
-                  style={{
-                    color: i === 0 ? "#86efac" : "#64748b",
-                    fontSize: 10,
-                    lineHeight: 1.5,
-                  }}
+                  className={`game-log-msg ${i === 0 ? "text-success-light" : "text-dim"}`}
                 >
                   {msg}
                 </div>
@@ -3567,49 +2696,13 @@ export default function App() {
             </div>
 
             {/* Chat */}
-            <div
-              style={{
-                background: "#1e293b",
-                border: "2px solid #334155",
-                borderRadius: 8,
-                display: "flex",
-                flexDirection: "column",
-                minHeight: 160,
-                maxHeight: 220,
-                flexShrink: 0,
-              }}
-            >
-              <div
-                style={{
-                  padding: "5px 10px",
-                  borderBottom: "1px solid #334155",
-                  fontSize: 11,
-                  fontWeight: "bold",
-                  color: "#94a3b8",
-                  letterSpacing: 1,
-                }}
-              >
+            <div className="chat-box">
+              <div className="chat-header">
                 💬 CHAT
               </div>
-              <div
-                style={{
-                  flex: 1,
-                  overflowY: "auto",
-                  padding: "6px 10px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 3,
-                }}
-              >
+              <div className="chat-messages-scroll">
                 {chatMessages.length === 0 && (
-                  <div
-                    style={{
-                      color: "#475569",
-                      fontSize: 10,
-                      textAlign: "center",
-                      marginTop: 12,
-                    }}
-                  >
+                  <div className="chart-desc text-center margin-top-12">
                     Say hi! 👋
                   </div>
                 )}
@@ -3618,29 +2711,13 @@ export default function App() {
                   return (
                     <div
                       key={i}
-                      style={{
-                        display: "flex",
-                        flexDirection: isMe ? "row-reverse" : "row",
-                        alignItems: "flex-end",
-                        gap: 3,
-                      }}
+                      className={`flex gap-3 align-end ${isMe ? "flex-reverse" : "flex-row"}`}
                     >
-                      <span style={{ fontSize: 12, flexShrink: 0 }}>
+                      <span className="text-sm flex-shrink-0">
                         {msg.token}
                       </span>
                       <div
-                        style={{
-                          background: isMe ? "#14532d" : "#334155",
-                          color: "#f1f5f9",
-                          padding: "4px 8px",
-                          borderRadius: isMe
-                            ? "10px 10px 2px 10px"
-                            : "10px 10px 10px 2px",
-                          fontSize: 11,
-                          maxWidth: "80%",
-                          wordBreak: "break-word",
-                          lineHeight: 1.4,
-                        }}
+                        className={`chat-bubble ${isMe ? "chat-me" : "chat-them"}`}
                       >
                         {msg.text}
                       </div>
@@ -3649,14 +2726,7 @@ export default function App() {
                 })}
                 <div ref={chatEndRef} />
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  borderTop: "1px solid #334155",
-                  padding: 5,
-                  gap: 4,
-                }}
-              >
+              <div className="chat-input-area">
                 <input
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
@@ -3665,30 +2735,12 @@ export default function App() {
                   }}
                   placeholder="Type..."
                   maxLength={120}
-                  style={{
-                    flex: 1,
-                    background: "#0f172a",
-                    border: "1px solid #475569",
-                    borderRadius: 6,
-                    padding: "4px 8px",
-                    color: "#f1f5f9",
-                    fontSize: 11,
-                    outline: "none",
-                  }}
+                  className="chat-input-field"
                 />
                 <button
                   onClick={sendChat}
                   disabled={!chatInput.trim()}
-                  style={{
-                    background: chatInput.trim() ? "#14532d" : "#1e293b",
-                    color: chatInput.trim() ? "#fff" : "#475569",
-                    border: "none",
-                    borderRadius: 6,
-                    padding: "4px 10px",
-                    fontSize: 13,
-                    cursor: chatInput.trim() ? "pointer" : "default",
-                    fontWeight: "bold",
-                  }}
+                  className={`btn-chat-go ${chatInput.trim() ? "btn-success" : "btn-dim"}`}
                 >
                   ➤
                 </button>
@@ -3696,63 +2748,49 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* ── Property Card Modal (triggered by clicking any board space) ── */}
+        {selectedSpace !== null &&
+          (() => {
+            const selSpace = SPACES[selectedSpace];
+            if (!selSpace) return null;
+            const selProp = props[selectedSpace] ?? null;
+            const mePlayer = rawPlayers[myIdx];
+            const playerIsOnSpace = mePlayer && mePlayer.position === selectedSpace;
+            const group = COLOR_GROUPS[selSpace.color] || [];
+            const hasMonopoly = selSpace.type === "property" && group.length > 0 && group.every((id) => props[id]?.owner === myIdx);
+            const isMyLandedProp = selProp && selProp.owner === myIdx && playerIsOnSpace;
+
+            const handleCardBuild = (spaceId) => {
+              if (!isMyLandedProp || !hasMonopoly || spaceId !== selectedSpace) return;
+              buildHouse(spaceId);
+            };
+
+            const handleCardBuy = () => {
+              if (!isMyTurn || selProp || !playerIsOnSpace) return;
+              setSelectedSpace(null);
+              pushState({
+                ...gameState,
+                modal: { type: "buy", spaceId: selectedSpace, playerIdx: myIdx },
+              });
+            };
+
+            return (
+              <PropertyCardModal
+                spaceId={selectedSpace}
+                prop={selProp}
+                players={rawPlayers}
+                myIdx={myIdx}
+                isMyTurn={isMyTurn}
+                allProps={props}
+                playerIsOnSpace={playerIsOnSpace}
+                onClose={() => setSelectedSpace(null)}
+                onBuild={isMyLandedProp && hasMonopoly ? handleCardBuild : null}
+                onBuy={selSpace.price && !selProp && isMyTurn && playerIsOnSpace ? handleCardBuy : null}
+              />
+            );
+          })()}
       </div>
-      {/* ── Property Card Modal (triggered by clicking any board space) ── */}
-      {selectedSpace !== null &&
-        (() => {
-          const selSpace = SPACES[selectedSpace];
-          if (!selSpace) return null;
-          const selProp = props[selectedSpace] ?? null;
-          const mePlayer = rawPlayers[myIdx];
-          // ── BUG FIX 1: buy only if physically on the space ──
-          const playerIsOnSpace =
-            mePlayer && mePlayer.position === selectedSpace;
-          // ── BUG FIX 2: build only on the specific landed space ──
-          const group = COLOR_GROUPS[selSpace.color] || [];
-          const hasMonopoly =
-            selSpace.type === "property" &&
-            group.length > 0 &&
-            group.every((id) => props[id]?.owner === myIdx);
-          // Build only allowed on the exact space the player just landed on
-          const isMyLandedProp =
-            selProp && selProp.owner === myIdx && playerIsOnSpace;
-
-          const handleCardBuild = (spaceId) => {
-            // Extra guard: must be on this specific space
-            if (!isMyLandedProp || !hasMonopoly || spaceId !== selectedSpace)
-              return;
-            buildHouse(spaceId);
-          };
-
-          const handleCardBuy = () => {
-            // Must be on the space AND it must be unowned AND it must be my turn
-            if (!isMyTurn || selProp || !playerIsOnSpace) return;
-            setSelectedSpace(null);
-            pushState({
-              ...gameState,
-              modal: { type: "buy", spaceId: selectedSpace, playerIdx: myIdx },
-            });
-          };
-
-          return (
-            <PropertyCardModal
-              spaceId={selectedSpace}
-              prop={selProp}
-              players={rawPlayers}
-              myIdx={myIdx}
-              isMyTurn={isMyTurn}
-              allProps={props}
-              playerIsOnSpace={playerIsOnSpace}
-              onClose={() => setSelectedSpace(null)}
-              onBuild={isMyLandedProp && hasMonopoly ? handleCardBuild : null}
-              onBuy={
-                selSpace.price && !selProp && isMyTurn && playerIsOnSpace
-                  ? handleCardBuy
-                  : null
-              }
-            />
-          );
-        })()}
     </div>
   );
 }

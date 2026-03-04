@@ -1,0 +1,161 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   BASE STYLES, KEYFRAMES & SCROLLBARS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Shared Animations */
+@keyframes diceShake {
+    0% {
+        transform: rotate(0deg) scale(1);
+    }
+
+    20% {
+        transform: rotate(-18deg) scale(1.25);
+    }
+
+    40% {
+        transform: rotate(18deg) scale(1.3);
+    }
+
+    60% {
+        transform: rotate(-12deg) scale(1.2);
+    }
+
+    80% {
+        transform: rotate(10deg) scale(1.15);
+    }
+
+    100% {
+        transform: rotate(0deg) scale(1);
+    }
+}
+
+@keyframes diceLand {
+    0% {
+        transform: scale(1.1);
+        box-shadow: 0 0 16px 2px rgba(255, 215, 0, 0.6);
+    }
+
+    100% {
+        transform: scale(1);
+        box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);
+    }
+}
+
+@keyframes tokenBounce {
+    0% {
+        transform: translateY(0) scale(1);
+    }
+
+    50% {
+        transform: translateY(-6px) scale(1.1);
+        filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.2));
+    }
+
+    100% {
+        transform: translateY(0) scale(1);
+        filter: none;
+    }
+}
+
+@keyframes cellPulse {
+    0% {
+        box-shadow: inset 0 0 0px rgba(250, 204, 21, 0);
+    }
+
+    50% {
+        box-shadow: inset 0 0 16px rgba(250, 204, 21, 0.5);
+    }
+
+    100% {
+        box-shadow: inset 0 0 0px rgba(250, 204, 21, 0);
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes timerPulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.dice-shake {
+    animation: diceShake 0.5s ease-in-out infinite;
+}
+
+.dice-land {
+    animation: diceLand 0.45s ease-out forwards;
+}
+
+.token-bounce {
+    animation: tokenBounce 0.55s ease-out forwards;
+}
+
+.cell-pulse {
+    animation: cellPulse 0.35s ease-out;
+}
+
+.timer-low {
+    animation: timerPulse 0.6s ease-in-out infinite;
+    color: #dc2626 !important;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e293b;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+/* Base generic elements */
+.pill {
+    cursor: pointer;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: #fff;
+    color: #1f2937;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.pill.active {
+    background: #16a34a;
+    color: #fff;
+    border-color: #16a34a;
+}

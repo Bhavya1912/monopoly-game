@@ -1,0 +1,64 @@
+/* 📱 PHONE VIEW (Default) */
+.game-root {
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at 15% 20%, rgba(34, 197, 94, 0.16), transparent 44%),
+        radial-gradient(circle at 85% 0%, rgba(251, 191, 36, 0.14), transparent 38%),
+        linear-gradient(180deg, #14532d 0%, #0f3f24 60%, #0b2f1b 100%);
+    font-family: Georgia, serif;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    gap: 8px;
+    box-sizing: border-box;
+}
+
+.game-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+}
+
+.board-wrap {
+    width: 100%;
+    max-width: 100vw;
+    flex-shrink: 0;
+    position: relative;
+    overflow-x: auto;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 12px;
+    padding: 4px;
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(2px);
+    display: flex;
+    justify-content: center;
+}
+
+.right-panel {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    min-height: 0;
+}
+
+.strategy-panel,
+.details-panel {
+    width: 100%;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    background: rgba(15, 23, 42, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}

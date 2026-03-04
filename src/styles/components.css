@@ -1,0 +1,656 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   GAME SPECIFIC COMPONENTS (Board, Cells, Panels)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Board Wrapper & Layout */
+.board-wrap {
+    position: relative;
+    padding: 8px;
+    background: #82b366;
+    border: 4px solid #4d7c0f;
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+
+.board-grid {
+    display: grid;
+    gap: 1px;
+    background: #4d7c0f;
+    border: 2px solid #4d7c0f;
+    border-radius: 4px;
+    padding: 1px;
+    overflow: hidden;
+}
+
+.board-center {
+    grid-row: 2/11;
+    grid-column: 2/11;
+    background: #c8e6c9;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    border-radius: 4px;
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.05);
+}
+
+.board-title {
+    font-size: 42px;
+    font-weight: 900;
+    letter-spacing: 8px;
+    color: #14532d;
+    font-family: 'Times New Roman', serif;
+    transform: rotate(-35deg);
+    user-select: none;
+    text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.4);
+    opacity: 0.8;
+}
+
+/* Board Cell */
+.board-cell {
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    transition: all 0.2s;
+}
+
+.board-cell:hover {
+    filter: brightness(0.95);
+    z-index: 10;
+}
+
+.board-cell.cell-selected {
+    outline: 3px solid #facc15;
+    outline-offset: -3px;
+    z-index: 20;
+    box-shadow: inset 0 0 12px rgba(250, 204, 21, 0.5);
+}
+
+.cell-color-band {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 20%;
+    background: var(--space-color);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.cell-owner-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--owner-color);
+    box-shadow: 0 0 5px var(--owner-glow);
+    z-index: 5;
+}
+
+.cell-name {
+    font-size: 8px;
+    font-weight: 800;
+    text-align: center;
+    line-height: 1.1;
+    color: #1f2937;
+    margin-top: 15%;
+    padding: 0 4px;
+    text-transform: uppercase;
+}
+
+.cell-price {
+    font-size: 7px;
+    font-weight: 700;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+.cell-tokens {
+    margin-top: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-bottom: 4px;
+}
+
+.cell-token {
+    font-size: 16px;
+    line-height: 1;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Cell Type Specifics */
+.bg-go {
+    background: #dcfce7;
+}
+
+.bg-jail {
+    background: #fef9c3;
+}
+
+.bg-gotojail {
+    background: #fee2e2;
+}
+
+.bg-freeparking {
+    background: #f0fdf4;
+}
+
+.bg-chance {
+    background: #ffedd5;
+}
+
+.bg-community {
+    background: #dbeafe;
+}
+
+.bg-tax {
+    background: #fce7f3;
+}
+
+/* In-game Popups (Buy, Jail, etc.) */
+.board-popup {
+    background: #fefce8;
+    border: 3px solid #a16207;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+    min-width: 260px;
+    max-width: 320px;
+    pointer-events: all;
+    animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Analytics & Side Panels */
+.analytics-panel {
+    background: #ecfeff;
+    border: 2px solid #0891b2;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.analytics-card {
+    background: #fff;
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.property-item-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 13px;
+    transition: background 0.2s;
+}
+
+.property-item-row:last-child {
+    border-bottom: none;
+}
+
+.owner-styled-row {
+    background: var(--owner-bg);
+    border-left: 4px solid var(--owner-border);
+}
+
+/* Badges */
+.frozen-badge {
+    font-size: 10px;
+    background: #bae6fd;
+    color: #075985;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-weight: 800;
+}
+
+.immune-badge {
+    font-size: 10px;
+    background: #d1fae5;
+    color: #065f46;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-weight: 800;
+}
+
+/* Chat Box */
+.chat-box {
+    background: #1e293b;
+    border: 2px solid #334155;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.chat-header {
+    background: #334155;
+    padding: 8px 12px;
+    color: #94a3b8;
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.chat-msg {
+    padding: 6px 12px;
+    margin: 4px 8px;
+    font-size: 13px;
+    max-width: 85%;
+}
+
+.chat-me {
+    background: #15803d;
+    color: #fff;
+    border-radius: 12px 12px 2px 12px;
+    align-self: flex-end;
+}
+
+.chat-them {
+    background: #475569;
+    color: #fff;
+    border-radius: 12px 12px 12px 2px;
+    align-self: flex-start;
+}
+
+/* ── GAME LAYOUT STRUCTURE ── */
+.game-root {
+    min-height: 100vh;
+    background: #14532d;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    box-sizing: border-box;
+    font-family: 'Inter', sans-serif;
+    color: #1e293b;
+}
+
+.game-layout {
+    display: flex;
+    gap: 16px;
+    flex: 1;
+    margin-top: 12px;
+}
+
+@media (max-width: 1024px) {
+    .game-layout {
+        flex-direction: column;
+    }
+}
+
+.board-wrap {
+    flex: 0 0 auto;
+}
+
+.right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 320px;
+}
+
+/* Header UI */
+.game-header {
+    background: #fefce8;
+    border-radius: 12px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 3px solid #a16207;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.room-badge,
+.mode-badge {
+    background: #f1f5f9;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+}
+
+/* Banner Messages */
+.banner-message {
+    background: #1e293b;
+    color: #f1f5f9;
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 800;
+    font-size: 14px;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border: 1px solid #334155;
+}
+
+.debt-banner {
+    background: #fee2e2;
+    border-left: 6px solid #ef4444;
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Strategy & Dashboard */
+.strategy-card-me {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    border: 2px solid #e2e8f0;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.strategy-me-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.btn-roll {
+    flex: 1;
+    background: #16a34a;
+    color: #fff;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: 900;
+    font-size: 18px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #14532d;
+    transition: all 0.1s;
+}
+
+.btn-roll:hover:not(:disabled) {
+    box-shadow: 0 5px 0 #14532d;
+}
+
+.btn-roll:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #14532d;
+}
+
+.btn-end {
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #4338ca;
+}
+
+.btn-dim {
+    background: #94a3b8 !important;
+    box-shadow: 0 4px 0 #64748b !important;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Analytics Dashboard */
+.analytics-title {
+    font-size: 12px;
+    font-weight: 900;
+    color: #0891b2;
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+}
+
+.row-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.card-title-tiny {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+.chart-svg {
+    background: #f8fafc;
+    border-radius: 8px;
+    margin: 8px 0;
+}
+
+.chart-desc {
+    font-size: 10px;
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+.cell-container {
+    grid-row: var(--row);
+    grid-column: var(--col);
+}
+
+.board-wrap {
+    display: inline-block;
+    max-width: fit-content;
+}
+
+/* ── RISK DASHBOARD ── */
+.risk-title {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #475569;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+}
+
+.risk-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.risk-player {
+    font-weight: 800;
+    width: 24px;
+}
+
+.risk-value {
+    width: 45px;
+    font-weight: 700;
+    text-align: right;
+}
+
+/* INSIGHTS */
+.insight-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+/* ── DETAILS PANEL (PROPERTIES, LOG, CHAT) ── */
+.details-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.property-list-card,
+.all-props-box {
+    background: #fff;
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    padding: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.property-list-title {
+    font-size: 13px;
+    font-weight: 900;
+    color: #1e293b;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #f1f5f9;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.property-list-scroll {
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--space-color);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.mono-badge {
+    background: #fef08a;
+    color: #854d0e;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #facc15;
+}
+
+.has-monopoly {
+    background: #fefce8;
+    border-left: 3px solid #facc15;
+}
+
+.no-monopoly {
+    border-left: 3px solid transparent;
+}
+
+.btn-build-plus {
+    background: #22c55e;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-build-plus:hover {
+    background: #16a34a;
+}
+
+/* GAME LOG */
+.game-log-box {
+    background: #0f172a;
+    border-radius: 12px;
+    padding: 12px;
+    max-height: 160px;
+    overflow-y: auto;
+    border: 2px solid #1e293b;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.game-log-msg {
+    font-size: 11px;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-family: monospace;
+}
+
+.game-log-msg:last-child {
+    border-bottom: none;
+}
+
+/* CHAT FIXES */
+.chat-messages-scroll {
+    padding: 12px;
+    height: 140px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: #f8fafc;
+}
+
+.chat-input-area {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    background: #e2e8f0;
+    border-top: 1px solid #cbd5e1;
+}
+
+.chat-input-field {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 20px;
+    border: 1px solid #94a3b8;
+    font-size: 13px;
+    outline: none;
+}
+
+.chat-input-field:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.btn-chat-go {
+    background: #3b82f6;
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.btn-chat-go:hover:not(:disabled) {
+    background: #2563eb;
+    transform: scale(1.1);
+}
+
+.chat-bubble {
+    padding: 8px 12px;
+    font-size: 13px;
+    max-width: 80%;
+    line-height: 1.4;
+}
+
+.flex-reverse {
+    flex-direction: row-reverse;
+}
+
+.flex-row {
+    flex-direction: row;
+}

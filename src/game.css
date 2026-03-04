@@ -1,0 +1,11 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   MONOPOLY MAIN CSS ENTRY
+   Import order: Base -> Components -> Layouts (Phone -> Tablet -> Web)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@import "./styles/base.css";
+@import "./styles/components.css";
+@import "./styles/ui.css";
+@import "./styles/phone.css";
+@import "./styles/tablet.css";
+@import "./styles/web.css";

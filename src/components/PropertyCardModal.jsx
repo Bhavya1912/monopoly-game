@@ -5,30 +5,23 @@ function RentRow({ label, amount, active, note, icon, hotel }) {
   return (
     <div className={`prop-rent-row${active ? " highlight" : ""}`}>
       <span
-        className="label"
-        style={{ display: "flex", alignItems: "center", gap: 4 }}
+        className="label flex align-center gap-4"
       >
-        {icon && <span style={{ fontSize: 10 }}>{icon}</span>}
+        {icon && <span className="text-xs">{icon}</span>}
         {label}
         {note && (
-          <span style={{ fontSize: 10, color: "#9ca3af" }}> {note}</span>
+          <span className="text-xs text-dim"> {note}</span>
         )}
         {active && (
           <span
-            style={{
-              fontSize: 9,
-              color: "#d97706",
-              fontWeight: 700,
-              marginLeft: 2,
-            }}
+            className="text-xs text-warning weight-bold margin-left-2"
           >
             ← NOW
           </span>
         )}
       </span>
       <span
-        className="amount"
-        style={{ color: hotel ? "#7c3aed" : active ? "#14532d" : "#1a1a1a" }}
+        className={`amount ${hotel ? "text-purple" : active ? "text-success-dark" : "text-black"}`}
       >
         {typeof amount === "number" ? `$${amount}` : amount}
       </span>
@@ -82,43 +75,23 @@ export default function PropertyCardModal({
   );
 
   return (
-    <div className="prop-card-overlay" onClick={onClose}>
+    <div
+      className="prop-card-overlay"
+      onClick={onClose}
+      style={{ "--prop-color": headerBg }}
+    >
       <div className="prop-card" onClick={(e) => e.stopPropagation()}>
         {/* Close button */}
         <button
           onClick={onClose}
-          style={{
-            position: "absolute",
-            top: 6,
-            right: 8,
-            background: "none",
-            border: "none",
-            fontSize: 18,
-            cursor: "pointer",
-            color: headerLight ? "#1a1a1a" : "#fff",
-            fontWeight: "bold",
-            lineHeight: 1,
-            zIndex: 10,
-          }}
+          className={`prop-card-close ${headerLight ? "light-theme" : "dark-theme"}`}
         >
           ✕
         </button>
 
         {/* Deed header */}
-        <div
-          className="prop-card-header"
-          style={{ background: headerBg, borderBottom: "2px solid #1a1a1a" }}
-        >
-          <div
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: 2,
-              color: headerLight ? "#1a1a1a" : "rgba(255,255,255,0.85)",
-              marginBottom: 2,
-            }}
-          >
+        <div className={`prop-card-header ${headerLight ? "light-text" : "dark-text"}`}>
+          <div className="prop-card-type">
             {isColorProp
               ? "Title Deed"
               : isRailroad
@@ -127,74 +100,28 @@ export default function PropertyCardModal({
                   ? "Utility"
                   : ""}
           </div>
-          <div
-            className="prop-card-title"
-            style={{
-              color: headerLight ? "#1a1a1a" : "#fff",
-              textShadow: headerLight ? "none" : "0 1px 3px rgba(0,0,0,0.4)",
-            }}
-          >
+          <div className="prop-card-title">
             {space.name}
           </div>
           {isOwned && owner && (
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                marginTop: 5,
-                background: "rgba(255,255,255,0.25)",
-                borderRadius: 20,
-                padding: "2px 10px",
-              }}
-            >
+            <div className="prop-card-owner-chip">
               <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: owner.color,
-                }}
+                className="prop-card-owner-dot"
+                style={{ "--owner-color": owner.color }}
               />
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: headerLight ? "#1a1a1a" : "#fff",
-                }}
-              >
+              <span className="prop-card-owner-text">
                 {owner.token} P{owner.id + 1}
                 {isMine ? " (You)" : ""}
               </span>
               {hasMonopoly && isMine && (
-                <span
-                  style={{
-                    fontSize: 9,
-                    background: "gold",
-                    color: "#1a1a1a",
-                    padding: "0 5px",
-                    borderRadius: 10,
-                    fontWeight: 800,
-                  }}
-                >
+                <span className="prop-card-monopoly-badge">
                   ★ MONOPOLY
                 </span>
               )}
             </div>
           )}
           {!isOwned && (
-            <div
-              style={{
-                display: "inline-block",
-                marginTop: 5,
-                background: "rgba(255,255,255,0.25)",
-                borderRadius: 20,
-                padding: "2px 10px",
-                fontSize: 10,
-                color: headerLight ? "#1a1a1a" : "#fff",
-                fontWeight: 700,
-              }}
-            >
+            <div className="prop-card-for-sale">
               For Sale
             </div>
           )}
@@ -202,24 +129,16 @@ export default function PropertyCardModal({
 
         {/* Price banner */}
         {space.price && (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "7px 0 5px",
-              borderBottom: "1px solid #e5e7eb",
-              fontSize: 13,
-              color: "#374151",
-            }}
-          >
-            <span style={{ fontWeight: 700, fontSize: 15, color: "#1a1a1a" }}>
+          <div className="prop-card-price-banner">
+            <span className="prop-card-price-value">
               ${space.price}
             </span>
-            <span style={{ marginLeft: 4, fontSize: 11 }}>purchase price</span>
+            <span className="prop-card-price-label">purchase price</span>
           </div>
         )}
 
         {/* Rent table */}
-        <div className="prop-card-body" style={{ paddingTop: 8 }}>
+        <div className="prop-card-body padding-top-8">
           {isColorProp && space.rent && (
             <>
               <RentRow
@@ -293,47 +212,23 @@ export default function PropertyCardModal({
         {/* Build section */}
         {isColorProp && space.houseCost && (
           <div className="prop-build-section">
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              <span style={{ fontSize: 12, color: "#374151" }}>
+            <div className="prop-build-info">
+              <span className="text-sm text-dim">
                 🏠 House cost: <strong>${space.houseCost}</strong>
               </span>
               {isOwned && (
-                <span style={{ fontSize: 14 }}>
+                <span className="text-md">
                   {hasHotel ? "🏨" : houses > 0 ? "🏠".repeat(houses) : "—"}
                 </span>
               )}
             </div>
             {isMine && !playerIsOnSpace && !hasHotel && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#9ca3af",
-                  marginBottom: 8,
-                  fontStyle: "italic",
-                  background: "#f9fafb",
-                  padding: "5px 8px",
-                  borderRadius: 5,
-                }}
-              >
+              <div className="prop-lock-msg">
                 🔒 You can only build here when you land on this property.
               </div>
             )}
             {isMine && playerIsOnSpace && !hasMonopoly && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#9ca3af",
-                  marginBottom: 8,
-                  fontStyle: "italic",
-                }}
-              >
+              <div className="mono-lock-msg">
                 Own all {group.length} properties in this group to build.
               </div>
             )}
@@ -341,18 +236,7 @@ export default function PropertyCardModal({
               <button
                 onClick={() => onBuild(spaceId)}
                 disabled={!canAfford}
-                style={{
-                  width: "100%",
-                  padding: "9px 0",
-                  background: canAfford ? "#14532d" : "#9ca3af",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 6,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: canAfford ? "pointer" : "not-allowed",
-                  marginBottom: 8,
-                }}
+                className={`btn-prop-action ${canAfford ? "btn-success-bg" : "btn-gray-bg"}`}
               >
                 {houses >= 4
                   ? `🏨 Build Hotel — $${space.houseCost}`
@@ -360,27 +244,12 @@ export default function PropertyCardModal({
               </button>
             )}
             {isMine && hasHotel && (
-              <div
-                style={{
-                  textAlign: "center",
-                  fontSize: 12,
-                  color: "#16a34a",
-                  fontWeight: 700,
-                  marginBottom: 8,
-                }}
-              >
+              <div className="hotel-built-msg">
                 🏨 Hotel built — maximum level reached!
               </div>
             )}
             {onBuild && isMyTurn && !canAfford && !hasHotel && (
-              <div
-                style={{
-                  textAlign: "center",
-                  fontSize: 11,
-                  color: "#dc2626",
-                  marginBottom: 8,
-                }}
-              >
+              <div className="no-funds-msg">
                 Not enough funds — need ${space.houseCost}
               </div>
             )}
@@ -389,42 +258,17 @@ export default function PropertyCardModal({
 
         {/* Buy button */}
         {!isOwned && space.price && (
-          <div
-            style={{
-              padding: "10px 14px 12px",
-              borderTop: "2px solid #1a1a1a",
-            }}
-          >
+          <div className="buy-footer">
             {onBuy ? (
               <button
                 onClick={onBuy}
                 disabled={!me || me.money < space.price}
-                style={{
-                  width: "100%",
-                  padding: "9px 0",
-                  background:
-                    me && me.money >= space.price ? "#14532d" : "#9ca3af",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 6,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor:
-                    me && me.money >= space.price ? "pointer" : "not-allowed",
-                }}
+                className={`btn-prop-action ${(me && me.money >= space.price) ? "btn-success-bg" : "btn-gray-bg"}`}
               >
                 Buy for ${space.price}
               </button>
             ) : (
-              <div
-                style={{
-                  textAlign: "center",
-                  fontSize: 11,
-                  color: "#9ca3af",
-                  fontStyle: "italic",
-                  padding: "4px 0",
-                }}
-              >
+              <div className="buy-status-msg">
                 {!isMyTurn
                   ? "Not your turn"
                   : !playerIsOnSpace
