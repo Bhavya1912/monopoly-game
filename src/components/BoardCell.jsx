@@ -34,6 +34,17 @@ export default function BoardCell({
     .replace("Reading Railroad", "Reading RR")
     .replace("Jail / Just Visiting", "Jail");
 
+  const tileFigure =
+    space.type === "go"
+      ? "🏃"
+      : space.type === "jail"
+        ? "🧑‍✈️"
+        : space.type === "freeparking"
+          ? "🧘"
+          : space.type === "chance"
+            ? "🃏"
+            : null;
+
   return (
     <div
       onClick={onClick}
@@ -55,6 +66,7 @@ export default function BoardCell({
         />
       )}
       <div className="cell-name">{shortName}</div>
+      {tileFigure && <div className="cell-figure">{tileFigure}</div>}
       <div className="cell-price">{space.price ? `$${space.price}` : ""}</div>
       <div className="cell-buildings">
         {prop ? (prop.hotel ? "🏨" : "🏠".repeat(prop.houses || 0)) : ""}

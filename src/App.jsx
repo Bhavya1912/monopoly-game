@@ -12,6 +12,7 @@ import {
   CHANCE_CARDS,
   COMMUNITY_CARDS,
   FREE_PARKING_EVENTS,
+  ROUND_EVENTS,
   PLAYER_COLORS,
   PLAYER_TOKENS,
   CELL_POSITIONS,
@@ -30,6 +31,8 @@ import {
   safeSettings,
   estimateAssetValueForPlayer,
   estimatePropertyRent,
+  marketGroupKey,
+  randomMarketModifiers,
   freshGameState,
 } from "./utils";
 
@@ -50,6 +53,7 @@ import BoardPopup from "./components/BoardPopup";
 import TurnTimer from "./components/TurnTimer";
 import GameTimer from "./components/GameTimer";
 import SettingsModal from "./components/SettingsModal";
+import { playSound } from "./soundManager";
 
 import "./game.css";
 
@@ -71,6 +75,18 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
+  const [aiChatMessages, setAiChatMessages] = useState([]);
+  const [audioSettings, setAudioSettings] = useState({
+    masterVolume: 0.8,
+    musicVolume: 0.5,
+    effectsVolume: 0.9,
+    muted: false,
+  });
+  const [tradeDraft, setTradeDraft] = useState({
+    offerPropertyId: "",
+    requestPropertyId: "",
+    requestCash: 0,
+  });
   const chatEndRef = useRef(null);
 
   // AI mode config
@@ -109,6 +125,17 @@ export default function App() {
   useEffect(() => {
     if (windowWidth >= 600 && mobileChatOpen) setMobileChatOpen(false);
   }, [windowWidth, mobileChatOpen]);
+
+  useEffect(() => {
+    const msg = latestLogEntry || "";
+    if (!msg) return;
+    if (/rolls|Auto-rolling/i.test(msg)) playSound("diceRoll", audioSettings);
+    else if (/bought/i.test(msg)) playSound("purchase", audioSettings);
+    else if (/rent/i.test(msg)) playSound("rent", audioSettings);
+    else if (/BANKRUPT/i.test(msg)) playSound("bankrupt", audioSettings);
+    else if (/Market shifted|Property Boom|Civic Audit|Build Subsidy/i.test(msg))
+      playSound("event", audioSettings);
+  }, [latestLogEntry, audioSettings]);
 
   const gsRef = useRef(null);
   const myIdxRef = useRef(null);
@@ -155,6 +182,11 @@ export default function App() {
     });
     return () => unsub();
   }, [roomCode, screen]);
+
+  useEffect(() => {
+    if (!isLocalGame || aiChatMessages.length === 0) return;
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 30);
+  }, [isLocalGame, aiChatMessages]);
 
   // ── Firebase: lobby ──
   useEffect(() => {
@@ -477,10 +509,48 @@ export default function App() {
             ? space.rent[0] * 2
             : space.rent[0];
     }
+    const marketKey = marketGroupKey(space);
+    const marketMod = marketKey
+      ? gsRef.current?.marketModifiers?.[marketKey] || 1
+      : 1;
+    rent = Math.max(1, Math.round(rent * marketMod));
     // Double rent effect on owner
     const owner = safePlayers(gsRef.current)[prop.owner];
     if ((owner?.doubleRentTurns || 0) > 0) rent *= 2;
     return rent;
+  };
+
+  const runRoundEvent = (players, props, freePot, log) => {
+    const evt = ROUND_EVENTS[Math.floor(Math.random() * ROUND_EVENTS.length)];
+    const nextPlayers = players.map((p) => ({ ...p }));
+    let nextFreePot = freePot || 0;
+
+    if (evt.type === "all_bonus") {
+      nextPlayers.forEach((p, idx) => {
+        if (!p || p.bankrupt) return;
+        nextPlayers[idx] = { ...p, money: p.money + evt.amount };
+      });
+    } else if (evt.type === "all_fee_to_pot") {
+      nextPlayers.forEach((p, idx) => {
+        if (!p || p.bankrupt) return;
+        nextPlayers[idx] = { ...p, money: p.money - evt.amount };
+        nextFreePot += evt.amount;
+      });
+    } else if (evt.type === "builders_bonus") {
+      const ownersWithBuilds = new Set(
+        Object.entries(props)
+          .filter(([, pr]) => pr && ((pr.houses || 0) > 0 || pr.hotel))
+          .map(([, pr]) => pr.owner),
+      );
+      ownersWithBuilds.forEach((ownerId) => {
+        const p = nextPlayers[ownerId];
+        if (!p || p.bankrupt) return;
+        nextPlayers[ownerId] = { ...p, money: p.money + evt.amount };
+      });
+    }
+
+    log.unshift(`${evt.title} ${evt.text}`);
+    return { nextPlayers, nextFreePot };
   };
 
   // ── Sell property (for bankruptcy prevention) ──
@@ -1291,13 +1361,39 @@ export default function App() {
     while (players[next]?.bankrupt) next = (next + 1) % players.length;
     const log = safeLog(gs);
     const isAI = players[next]?.isAI;
+    const settings = safeSettings(gs);
+    const wrappedRound = next <= gs.currentPlayer;
+    const nextTurnCount = (gs.turnCount || 1) + 1;
+    let nextPlayers = players.map((p) => (p ? { ...p } : p));
+    let nextFreePot = gs.freePot || 0;
+    let marketModifiers = gs.marketModifiers || randomMarketModifiers();
+
+    if (wrappedRound && settings.dynamicMarket) {
+      marketModifiers = randomMarketModifiers();
+      log.unshift("📉 Market shifted this round. Property rents were re-priced!");
+    }
+
+    if (
+      wrappedRound &&
+      settings.eventRounds &&
+      nextTurnCount % Math.max(2, settings.eventInterval || 4) === 0
+    ) {
+      const outcome = runRoundEvent(nextPlayers, safeProps(gs), nextFreePot, log);
+      nextPlayers = outcome.nextPlayers;
+      nextFreePot = outcome.nextFreePot;
+    }
+
     log.unshift(`▶ Player ${next + 1}${isAI ? " 🤖" : ""}'s turn`);
     pushState({
       ...gs,
+      players: nextPlayers,
       currentPlayer: next,
       rolled: false,
       doubleCount: 0,
       rolling: false,
+      freePot: nextFreePot,
+      marketModifiers,
+      turnCount: nextTurnCount,
       log: log.slice(0, 25),
       turnStartTime: Date.now(),
       modal: null,
@@ -1584,6 +1680,9 @@ export default function App() {
     setMyIdx(0);
     myIdxRef.current = 0;
     setIsLocalGame(true);
+    setAiChatMessages([
+      { id: -1, token: "🤖", text: "I am your AI advisor. Ask me about builds, trades, or risk.", ts: Date.now() },
+    ]);
     prevPositionsRef.current = null;
     setGameState(gs);
     setScreen("game");
@@ -1595,10 +1694,43 @@ export default function App() {
     setChatInput("");
     const me = safePlayers(gsRef.current)[myIdx];
     const token = me?.token || PLAYER_TOKENS[myIdx] || "?";
+
+    if (isLocalGame) {
+      const now = Date.now();
+      const mine = { id: myIdx, token, text, ts: now };
+      const advice = getAIAdvisorReply(text);
+      const aiToken = safePlayers(gsRef.current).find((p) => p?.isAI && !p.bankrupt)?.token || "🤖";
+      const aiMsg = { id: -1, token: aiToken, text: advice, ts: now + 1 };
+      setAiChatMessages((prev) => [...prev, mine, aiMsg]);
+      return;
+    }
+
     const msgId = Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     await update(ref(db, `games/${roomCode}/chat`), {
       [msgId]: { id: myIdx, token, text, ts: Date.now() },
     });
+  };
+
+  const getAIAdvisorReply = (input) => {
+    const t = input.toLowerCase();
+    const me = safePlayers(gsRef.current)[myIdx];
+    if (!me) return "Focus on cash flow first, then build on monopolies.";
+    const mySet = Object.entries(COLOR_GROUPS)
+      .map(([color, ids]) => ({ color, ids, own: ids.filter((id) => safeProps(gsRef.current)[id]?.owner === myIdx).length }))
+      .sort((a, b) => b.own - a.own)[0];
+
+    if (t.includes("why") && t.includes("buy")) {
+      return `I buy to deny monopolies and compound rent. Your best set is ${COLOR_LABELS[mySet?.color] || "a color group"} (${mySet?.own || 0}/${mySet?.ids?.length || 0}).`;
+    }
+    if (t.includes("build") || t.includes("house")) {
+      return me.money > 350
+        ? "Yes—build on your strongest color set to multiply rent pressure."
+        : "Not yet. Keep a $300-$400 safety buffer before building.";
+    }
+    if (t.includes("trade") || t.includes("deal")) {
+      return "Offer properties that don't complete enemy sets; ask for cash plus a strategic color.";
+    }
+    return "Tip: prioritize completing one color set, then build evenly to keep rent pressure high.";
   };
 
   const resetToLobby = () => {
@@ -1611,6 +1743,49 @@ export default function App() {
     setSellToPay(null);
     setIsLocalGame(false);
     setSelectedSpace(null);
+    setAiChatMessages([]);
+  };
+
+  const submitTradeOffer = () => {
+    const gs = gsRef.current;
+    if (!gs || !isLocalGame) return;
+    const offerId = Number(tradeDraft.offerPropertyId);
+    const reqId = Number(tradeDraft.requestPropertyId);
+    const askCash = Number(tradeDraft.requestCash || 0);
+    const props = safeProps(gs);
+    const players = safePlayers(gs).map((p) => ({ ...p }));
+    const me = players[myIdx];
+    const aiId = players.find((p) => p?.isAI && !p.bankrupt)?.id;
+    if (!me || aiId === undefined) return;
+    if (!props[offerId] || props[offerId].owner !== myIdx) return;
+
+    let valueGiven = (SPACES[offerId]?.price || 0);
+    let valueReceived = askCash;
+    if (!Number.isNaN(reqId) && props[reqId] && props[reqId].owner === aiId) {
+      valueReceived += SPACES[reqId]?.price || 0;
+    }
+
+    const aiAccepts = valueReceived * 0.9 <= valueGiven;
+    if (!aiAccepts) {
+      setAiChatMessages((prev) => [
+        ...prev,
+        { id: -1, token: players[aiId].token, text: "I reject this deal—value is too low for me.", ts: Date.now() },
+      ]);
+      return;
+    }
+
+    const newProps = { ...props, [offerId]: { ...props[offerId], owner: aiId } };
+    if (!Number.isNaN(reqId) && props[reqId] && props[reqId].owner === aiId) {
+      newProps[reqId] = { ...props[reqId], owner: myIdx };
+    }
+    if (askCash > 0 && players[aiId].money >= askCash) {
+      players[aiId].money -= askCash;
+      players[myIdx].money += askCash;
+    }
+    const log = safeLog(gs);
+    log.unshift(`🤝 Trade accepted: ${players[myIdx].token} traded ${SPACES[offerId]?.name}`);
+    pushState({ ...gs, players, properties: newProps, log: log.slice(0, 25) });
+    setTradeDraft({ offerPropertyId: "", requestPropertyId: "", requestCash: 0 });
   };
 
   const baseBoardSize = 550;
@@ -1621,6 +1796,7 @@ export default function App() {
   const targetBoardWidth = Math.max(280, (windowWidth - horizontalPadding) * widthRatio);
   const maxByHeight = Math.max(280, windowHeight * (isPhone ? 0.5 : 0.72));
   const boardPixelSize = Math.min(targetBoardWidth, maxByHeight);
+  const adaptiveScale = boardPixelSize / baseBoardSize;
   const phoneScale = Math.max(0.48, Math.min(0.68, (windowWidth - 30) / baseBoardSize));
   const tabletScale = layoutFocus === "board" ? 0.86 : 0.76;
   const desktopScale = Math.max(
@@ -1628,10 +1804,13 @@ export default function App() {
     Math.min(1.5, (windowWidth * 0.4) / baseBoardSize, (windowHeight * 0.78) / baseBoardSize),
   );
   const boardScale = isPhone
-    ? phoneScale
+    ? Math.min(phoneScale, adaptiveScale)
     : isTablet
-      ? tabletScale
-      : (layoutFocus === "board" ? desktopScale : Math.max(0.8, desktopScale - 0.18));
+      ? Math.min(tabletScale, adaptiveScale)
+      : Math.min(
+        layoutFocus === "board" ? desktopScale : Math.max(0.8, desktopScale - 0.18),
+        adaptiveScale,
+      );
   const CORNER = Math.round(68 * boardScale),
     CELL = Math.round(46 * boardScale);
   const cols = [CORNER, ...Array(9).fill(CELL), CORNER];
@@ -2079,6 +2258,7 @@ export default function App() {
   const me = rawPlayers[myIdx] || null;
   const modal = gameState.modal || null;
   const gs_s = safeSettings(gameState);
+  const displayedChat = isLocalGame ? aiChatMessages : chatMessages;
 
   // My properties for building panel
   const myProps = Object.entries(props).filter(
@@ -2104,21 +2284,25 @@ export default function App() {
   const chartMin = Math.min(...seriesValues, 0);
   const chartMax = Math.max(...seriesValues, 1);
 
+  const calculateMonopolyChance = (player, pid, color, ids) => {
+    const owned = ids.filter((id) => props[id]?.owner === pid).length;
+    const blocked = ids.filter((id) => props[id] && props[id].owner !== pid).length;
+    const playersAlive = rawPlayers.filter((p) => p && !p.bankrupt).length || 1;
+    const ownRatio = owned / ids.length;
+    const moneyFactor = clamp((player.money || 0) / 2200, 0, 1);
+    let chance = ownRatio * 70 + moneyFactor * 15 + ((4 - playersAlive) / 3) * 6 - blocked * 12;
+    if (owned === ids.length - 1) chance += 14;
+    if (owned === 0) chance *= 0.45;
+    return Math.round(clamp(chance, 2, 95));
+  };
+
   const playerProbabilities = rawPlayers.map((pl, pid) => {
     if (!pl || pl.bankrupt) return { pid, chance: 0, progress: "Out" };
     let bestChance = 0;
     let bestProgress = "0/0";
     Object.entries(COLOR_GROUPS).forEach(([color, ids]) => {
+      const chance = calculateMonopolyChance(pl, pid, color, ids);
       const owned = ids.filter((id) => props[id]?.owner === pid).length;
-      const blocked = ids.filter(
-        (id) => props[id] && props[id].owner !== pid,
-      ).length;
-      const unowned = ids.length - owned - blocked;
-      const chance = clamp(
-        (owned / ids.length) * 70 +
-        (unowned / ids.length) * 20 -
-        (blocked / ids.length) * 60,
-      );
       if (chance > bestChance) {
         bestChance = chance;
         bestProgress = `${owned}/${ids.length} ${COLOR_LABELS[color] || "Set"}`;
@@ -2127,33 +2311,39 @@ export default function App() {
     return { pid, chance: Math.round(bestChance), progress: bestProgress };
   });
 
+  const myGroupChances = Object.entries(COLOR_GROUPS)
+    .map(([color, ids]) => {
+      const me = rawPlayers[myIdx];
+      if (!me) return null;
+      return {
+        color,
+        label: COLOR_LABELS[color] || "Set",
+        chance: calculateMonopolyChance(me, myIdx, color, ids),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.chance - a.chance)
+    .slice(0, 3);
+
+  const calculateBankruptcyRisk = (player, pid) => {
+    const cash = Math.max(player.money || 1, 1);
+    const lookAhead = Array.from({ length: 8 }, (_, i) => (player.position + i + 1) % 40);
+    const expectedRentExposure = lookAhead.reduce((sum, id) => {
+      const prop = props[id];
+      if (!prop || prop.owner === pid) return sum;
+      return sum + estimatePropertyRent(id, prop, props);
+    }, 0) / 8;
+    const oppStrength = Object.entries(props).reduce((sum, [id, prop]) => {
+      if (!prop || prop.owner === pid) return sum;
+      const upgrades = (prop.houses || 0) + (prop.hotel ? 5 : 0);
+      return sum + estimatePropertyRent(+id, prop, props) * (1 + upgrades * 0.12);
+    }, 0) / 40;
+    return Math.round(clamp((expectedRentExposure + oppStrength) / cash * 100, 5, 98));
+  };
+
   const riskByPlayer = rawPlayers.map((pl, pid) => {
     if (!pl || pl.bankrupt) return { pid, risk: 100, label: "Critical" };
-    const cash = pl.money || 0;
-    let risk = cash < 150 ? 60 : cash < 300 ? 45 : cash < 600 ? 25 : 10;
-    const lookAhead = Array.from(
-      { length: 8 },
-      (_, i) => (pl.position + i + 1) % 40,
-    );
-    const maxUpcoming = Math.max(
-      0,
-      ...lookAhead.map((id) => {
-        const prop = props[id];
-        if (!prop || prop.owner === pid) return 0;
-        return estimatePropertyRent(id, prop, props);
-      }),
-    );
-    risk += Math.min(35, maxUpcoming * 0.12);
-    const oppMono = Object.values(COLOR_GROUPS).filter((ids) => {
-      const owners = ids
-        .map((id) => props[id]?.owner)
-        .filter((v) => v !== undefined);
-      return owners.length === ids.length && owners[0] !== pid;
-    }).length;
-    risk += oppMono * 8;
-    const assets = estimateAssetValueForPlayer(pid, props);
-    if (assets < 400) risk += 8;
-    const rounded = Math.round(clamp(risk));
+    const rounded = calculateBankruptcyRisk(pl, pid);
     const label =
       rounded < 30
         ? "Low"
@@ -2569,6 +2759,11 @@ export default function App() {
                 <div className="card-title-tiny margin-bottom-6">
                   Monopoly Completion Chance
                 </div>
+                {myGroupChances.length > 0 && (
+                  <div className="text-xs text-dim margin-bottom-8">
+                    {myGroupChances.map((g) => `${g.label}: ${g.chance}%`).join(" • ")}
+                  </div>
+                )}
                 {playerProbabilities.map((p) => (
                   <div key={`prob-${p.pid}`} className="margin-bottom-6">
                     <div className="row-between text-xs">
@@ -2614,7 +2809,7 @@ export default function App() {
                         />
                       </div>
                       <span className={`risk-value risk-${riskClass}-text`}>
-                        {r.label}
+                        {r.risk}% ({r.label})
                       </span>
                     </div>
                   );
@@ -2718,6 +2913,68 @@ export default function App() {
               </div>
             )}
 
+            {isLocalGame && (
+              <div className="analytics-card">
+                <div className="card-title-tiny margin-bottom-6">🤝 Trade Proposal (AI)</div>
+                <div className="text-xs text-dim margin-bottom-6">
+                  Offer one of your properties. Request AI property and/or cash.
+                </div>
+                <div className="flex column-gap-6 row-gap-6 flex-wrap">
+                  <select
+                    value={tradeDraft.offerPropertyId}
+                    onChange={(e) => setTradeDraft((p) => ({ ...p, offerPropertyId: e.target.value }))}
+                    className="chat-input-field"
+                  >
+                    <option value="">You Offer: property</option>
+                    {myProps.map(([id]) => (
+                      <option key={`o-${id}`} value={id}>{SPACES[+id]?.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={tradeDraft.requestPropertyId}
+                    onChange={(e) => setTradeDraft((p) => ({ ...p, requestPropertyId: e.target.value }))}
+                    className="chat-input-field"
+                  >
+                    <option value="">You Request: property (optional)</option>
+                    {Object.entries(props)
+                      .filter(([, p]) => p && p.owner !== myIdx)
+                      .map(([id]) => (
+                        <option key={`r-${id}`} value={id}>{SPACES[+id]?.name}</option>
+                      ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={0}
+                    value={tradeDraft.requestCash}
+                    onChange={(e) => setTradeDraft((p) => ({ ...p, requestCash: Number(e.target.value || 0) }))}
+                    placeholder="Cash request"
+                    className="chat-input-field"
+                  />
+                  <button
+                    onClick={submitTradeOffer}
+                    disabled={!tradeDraft.offerPropertyId}
+                    className={`btn-chat-go ${tradeDraft.offerPropertyId ? "btn-success" : "btn-dim"}`}
+                  >
+                    Send Offer
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="analytics-card">
+              <div className="card-title-tiny margin-bottom-6">🔊 Audio Settings</div>
+              <label className="text-xs text-dim">Master Volume: {Math.round(audioSettings.masterVolume * 100)}%</label>
+              <input type="range" min="0" max="1" step="0.05" value={audioSettings.masterVolume} onChange={(e) => setAudioSettings((s) => ({ ...s, masterVolume: +e.target.value }))} />
+              <label className="text-xs text-dim">Music Volume: {Math.round(audioSettings.musicVolume * 100)}%</label>
+              <input type="range" min="0" max="1" step="0.05" value={audioSettings.musicVolume} onChange={(e) => setAudioSettings((s) => ({ ...s, musicVolume: +e.target.value }))} />
+              <label className="text-xs text-dim">Effects Volume: {Math.round(audioSettings.effectsVolume * 100)}%</label>
+              <input type="range" min="0" max="1" step="0.05" value={audioSettings.effectsVolume} onChange={(e) => setAudioSettings((s) => ({ ...s, effectsVolume: +e.target.value }))} />
+              <label className="text-xs text-dim flex-gap-8 align-center margin-top-6">
+                <input type="checkbox" checked={audioSettings.muted} onChange={(e) => setAudioSettings((s) => ({ ...s, muted: e.target.checked }))} />
+                Mute all
+              </label>
+            </div>
+
             {/* All Properties */}
             <div className="all-props-box">
               <div className="property-list-title">
@@ -2777,15 +3034,15 @@ export default function App() {
             {!isPhone && (
               <div className="chat-box">
                 <div className="chat-header">
-                  💬 CHAT
+                  {isLocalGame ? "🤖 AI CHAT" : "💬 CHAT"}
                 </div>
                 <div className="chat-messages-scroll">
-                  {chatMessages.length === 0 && (
+                  {displayedChat.length === 0 && (
                     <div className="chart-desc text-center margin-top-12">
                       Say hi! 👋
                     </div>
                   )}
-                  {chatMessages.map((msg, i) => {
+                  {displayedChat.map((msg, i) => {
                     const isMe = msg.id === myIdx;
                     return (
                       <div
@@ -2812,7 +3069,7 @@ export default function App() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") sendChat();
                     }}
-                    placeholder="Type..."
+                    placeholder={isLocalGame ? "Ask AI for strategy..." : "Type..."}
                     maxLength={120}
                     className="chat-input-field"
                   />
@@ -2841,15 +3098,15 @@ export default function App() {
             {mobileChatOpen && (
               <div className="chat-mobile-sheet">
                 <div className="chat-header">
-                  💬 CHAT
+                  {isLocalGame ? "🤖 AI CHAT" : "💬 CHAT"}
                 </div>
                 <div className="chat-messages-scroll">
-                  {chatMessages.length === 0 && (
+                  {displayedChat.length === 0 && (
                     <div className="chart-desc text-center margin-top-12">
                       Say hi! 👋
                     </div>
                   )}
-                  {chatMessages.map((msg, i) => {
+                  {displayedChat.map((msg, i) => {
                     const isMe = msg.id === myIdx;
                     return (
                       <div
@@ -2876,7 +3133,7 @@ export default function App() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") sendChat();
                     }}
-                    placeholder="Type..."
+                    placeholder={isLocalGame ? "Ask AI for strategy..." : "Type..."}
                     maxLength={120}
                     className="chat-input-field"
                   />

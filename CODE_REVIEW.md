@@ -1,72 +1,124 @@
 # Code Review – Monopoly Game
 
 ## Scope reviewed
-- Entire repository structure and core source files.
+- Repository structure and core source files (`src/App.jsx`, `src/constants.js`, `src/ai.js`, `src/utils.js`, and styling/component files).
 - Static checks (`npm run lint`, `npm run build`).
-- Focus areas: architecture, data consistency, multiplayer safety, maintainability, and docs accuracy.
+- Focus areas: architecture, multiplayer correctness, maintainability, and gameplay depth.
 
 ## What looks good
-1. **Strong baseline quality checks**: project lint/build scripts run cleanly.
-2. **Good defensive helpers**: `safePlayers`, `safeProps`, `safeLog`, etc. reduce crash risk from malformed realtime payloads.
-3. **Clear domain modeling**: board constants and AI profiles are readable and reasonably organized.
-4. **UI component split is present** for many visual concerns (board cell, modals, timers), even if game logic is centralized.
+1. **Strong baseline quality checks**: lint/build scripts run cleanly.
+2. **Defensive helpers**: `safePlayers`, `safeProps`, `safeLog`, etc. reduce crash risk from malformed realtime payloads.
+3. **Clear board-domain constants**: board spaces, card pools, and settings are centralized and readable.
+4. **Good UI decomposition** for board cells, modal overlays, and timers.
 
-## Key findings (highest priority first)
+## Key engineering findings (highest priority first)
 
-### 1) Multiplayer state writes are non-transactional (risk: lost updates)
-- `pushState` writes the entire game state via `set(games/{room}/state, safe)`.
-- In realtime multiplayer, if two clients write close together, one full-state write can overwrite the other.
-- This is especially risky during simultaneous actions (timers, chat-triggered actions, modal resolutions).
-
-**Recommendation**
-- Move critical mutations to Firebase `runTransaction` on `games/{room}/state`.
-- At minimum, split state into narrower update paths and use version/turn checks before write.
-
-### 2) Room join/create flow has race/collision windows (risk: accidental overwrite / overfill)
-- `createGame` generates a code and writes directly without checking whether that code already exists.
-- `joinGame` does `get(...)` then `update(...)` as separate operations.
-- Two players joining at nearly the same time can pass the same availability check before either update lands.
+### 1) Multiplayer state writes are still non-transactional (risk: lost updates)
+- Full-state writes can overwrite each other if actions race across clients.
+- This is most dangerous for turn progression, purchases, and bankruptcy resolution.
 
 **Recommendation**
-- Use a transaction for lobby slot reservation.
-- For creation, retry code generation until transaction confirms room path did not exist.
+- Move critical writes to Firebase `runTransaction` on `games/{room}/state`.
+- Introduce a `version` integer and reject stale updates.
 
-### 3) `App.jsx` is oversized (maintainability risk)
-- `src/App.jsx` is ~2800 lines and mixes rendering, rules engine, AI orchestration, firebase IO, analytics, and timers.
-- This increases regression risk and makes testing difficult.
-
-**Recommendation**
-- Extract a pure `gameEngine` module (move rules: dice, rent, bankruptcy, turn advance).
-- Extract a `useRealtimeRoom` hook for Firebase subscribe/write logic.
-- Keep `App.jsx` as composition + UI glue.
-
-### 4) Firebase config is hard-coded in source (deployment/security hygiene risk)
-- Firebase project identifiers are committed in `src/services/firebase.js`.
-- README also recommends env vars, but implementation still hard-codes values.
+### 2) Join/create race windows remain (risk: overfill or accidental room collisions)
+- Room creation does not prove code uniqueness atomically.
+- Join performs read-then-write, which can race for final slots.
 
 **Recommendation**
-- Move config to Vite env vars (`import.meta.env.VITE_*`).
-- Add `.env.example` and update docs.
+- Use transactions for both room creation and lobby seat reservation.
+- Retry generated room codes when transaction fails.
 
-### 5) Documentation drift in README
-- README says Firebase config lives in `src/App.jsx`, but actual config is in `src/services/firebase.js`.
+### 3) `App.jsx` is a monolith (maintainability risk)
+- Rules engine + networking + render logic are tightly coupled.
+- Hard to unit test and reason about side effects.
 
 **Recommendation**
-- Update README paths to match current code layout.
+- Extract pure rules into `src/game/engine.js`.
+- Extract realtime sync into `src/hooks/useRealtimeRoom.js`.
 
-## Suggested phased plan
+### 4) Firebase config management is inconsistent with docs
+- Implementation still keeps concrete config in source.
+- README guidance and actual file locations have drifted.
 
-### Phase 1 (safety)
-- Add transactional writes for state and lobby joins.
-- Add optimistic concurrency guard (turn/version).
+**Recommendation**
+- Move to `import.meta.env.VITE_*` and add `.env.example`.
+- Refresh README setup paths.
 
-### Phase 2 (maintainability)
-- Extract game logic to `src/game/engine.js` + small unit tests.
-- Extract hooks for room/chats/state synchronization.
+## Gameplay improvements to make the game more interesting
 
-### Phase 3 (hygiene)
-- Move Firebase config to env variables.
-- Fix README path references.
+### A) Dynamic market mode (high impact, moderate effort)
+**Idea**: Property values and rent fluctuate each round by color group trend (e.g., utilities boom, rail slump).
+
+**Why it helps**
+- Increases strategic diversity and replayability.
+- Reduces repetitive “same optimal buys every game” feeling.
+
+**Implementation sketch**
+- Add per-group modifier table in `src/constants.js`.
+- Recompute rent using base rent × modifier in `estimatePropertyRent` (`src/utils.js`).
+- Surface trend indicators on cards/cells (`BoardCell` + property modal).
+
+### B) Public auctions when a player declines a property (high impact, medium effort)
+**Idea**: If active player refuses purchase, launch 15-second multiplayer auction.
+
+**Why it helps**
+- Creates player interaction spikes and bluffing.
+- Helps trailing players recover through clever bids.
+
+**Implementation sketch**
+- Add `auction` object to game state (`spaceId`, `highestBid`, `leaderId`, `deadline`).
+- Add bid actions and countdown UI in side panel/modal.
+- Resolve auction server-side via transaction when deadline is reached.
+
+### C) Mission cards / secret objectives (high impact, low-medium effort)
+**Idea**: Each player gets 1–2 hidden goals (e.g., own 3 railroads, build 2 hotels, hit $2500 cash).
+
+**Why it helps**
+- Adds alternate victory pressure and surprise moments.
+- Encourages varied play styles beyond rent-maxing.
+
+**Implementation sketch**
+- Add mission deck constants and per-player mission assignments.
+- Track mission completion in turn loop.
+- Reward with cash bonus, one-time immunity, or extra roll token.
+
+### D) Event rounds every N turns (medium impact, low effort)
+**Idea**: Global events trigger periodically (tax holiday, construction subsidy, market crash, free jail release).
+
+**Why it helps**
+- Adds tempo swings and memorable moments.
+- Keeps late game from feeling deterministic.
+
+**Implementation sketch**
+- Reuse existing event/card infrastructure; trigger on turn counter modulo.
+- Post event banner to log/chat feed.
+
+### E) Smarter AI personalities (medium impact, medium effort)
+**Idea**: Expand AI behavior archetypes (speculator, conservative landlord, railroad specialist, revenge bidder).
+
+**Why it helps**
+- AI matches feel less predictable.
+- Better solo replay value.
+
+**Implementation sketch**
+- Extend `AI_PERSONALITY` and scoring heuristics in `src/ai.js`.
+- Add table-driven decision weights by phase (early/mid/late game).
+
+## Suggested rollout plan
+
+### Phase 1 (correctness first)
+1. Transactional writes + versioning.
+2. Transactional lobby join/create.
+
+### Phase 2 (fun features)
+1. Public auctions.
+2. Event rounds.
+3. AI personality expansion.
+
+### Phase 3 (meta replayability)
+1. Dynamic market mode.
+2. Mission cards + rewards.
 
 ## Validation run
 - `npm run lint` ✅
