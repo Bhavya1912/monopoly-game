@@ -113,6 +113,11 @@ export default function App() {
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
+  const playerPositionsKey = gameState?.players
+    ?.map((p) => `${p?.position ?? ""}`)
+    .join(",");
+  const latestLogEntry = gameState?.log?.[0] || "";
+
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
@@ -142,10 +147,6 @@ export default function App() {
   const prevDiceRef = useRef([1, 1]);
   const prevPositionsRef = useRef(null);
   const aiTimerRef = useRef(null);
-  const playerPositionsKey = gameState?.players
-    ?.map((p) => `${p?.position ?? ""}`)
-    .join(",");
-  const latestLogEntry = gameState?.log?.[0] || "";
 
   gsRef.current = gameState;
   myIdxRef.current = myIdx;
