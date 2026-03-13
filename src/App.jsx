@@ -426,13 +426,13 @@ export default function App() {
   ]);
 
   const animateSteps = (playerId, from, steps) => {
-    const STEP_MS = 200;
+    const STEP_MS = 250; // Slower, more deliberate movement
     let step = 0;
     const tick = () => {
       if (step >= steps) {
         setFlashCell(null);
         setBouncingPlayer(playerId);
-        setTimeout(() => setBouncingPlayer(null), 600);
+        setTimeout(() => setBouncingPlayer(null), 800);
         setVisualPositions((prev) => {
           const n = { ...prev };
           delete n[playerId];
@@ -446,7 +446,7 @@ export default function App() {
       step++;
       setTimeout(tick, STEP_MS);
     };
-    setTimeout(tick, 50);
+    setTimeout(tick, 100);
   };
 
   // ── pushState — works for local AI games and Firebase multiplayer ──
@@ -1569,35 +1569,58 @@ export default function App() {
   const handleRouletteSpin = () => {
     const gs = gsRef.current;
     if (!gs?.modal || gs.modal.type !== "roulette") return;
+    
+    // Phase 1: Start Spinning
+    if (!gs.modal.isSpinning && gs.modal.targetIdx === undefined) {
+      const targetIdx = Math.floor(Math.random() * ROULETTE_OUTCOMES.length);
+      pushState({ 
+        ...gs, 
+        modal: { ...gs.modal, isSpinning: true, targetIdx } 
+      });
+      return;
+    }
+
+    // Phase 2: Animation finished, apply result
     const curIdx = gs.currentPlayer;
     const players = safePlayers(gs).map((p) => ({ ...p }));
     const props = safeProps(gs);
     const player = players[curIdx];
     if (!player) return;
+    
     const log = safeLog(gs);
-    const outcome = ROULETTE_OUTCOMES[Math.floor(Math.random() * ROULETTE_OUTCOMES.length)];
+    const targetIdx = gs.modal.targetIdx;
+    const outcome = ROULETTE_OUTCOMES[targetIdx];
 
     if (outcome.type === "reward") {
       players[curIdx] = { ...player, money: player.money + outcome.amount };
       log.unshift(`🎡 ${player.token} spun Roulette: ${outcome.label}`);
-      const next = { ...gs, players, modal: null, log: log.slice(0, 25) };
-      pushState(next).then(() => advanceTurn(next));
+      const next = { ...gs, players, modal: { type: "notify", title: "Roulette Reward!", text: `You won $${outcome.amount}!` }, log: log.slice(0, 25) };
+      pushState(next).then(() => setTimeout(() => {
+        const gs2 = gsRef.current;
+        pushState({ ...gs2, modal: null }).then(() => advanceTurn({ ...gs2, modal: null }));
+      }, 1500));
       return;
     }
 
     if (outcome.type === "none") {
       log.unshift(`🎡 ${player.token} spun Roulette: Better Luck Next Time.`);
-      const next = { ...gs, modal: null, log: log.slice(0, 25) };
-      pushState(next).then(() => advanceTurn(next));
+      const next = { ...gs, modal: { type: "notify", title: "Better Luck Next Time", text: "No reward this spin." }, log: log.slice(0, 25) };
+      pushState(next).then(() => setTimeout(() => {
+        const gs2 = gsRef.current;
+        pushState({ ...gs2, modal: null }).then(() => advanceTurn({ ...gs2, modal: null }));
+      }, 1500));
       return;
     }
 
     const mine = getEligibleSwapMine(props, curIdx);
     const theirs = getEligibleStealable(props, curIdx);
     if (!theirs.length || (outcome.type === "swap" && !mine.length)) {
-      const log2 = ["Insufficient Properties", ...log].slice(0, 25);
-      const next = { ...gs, modal: { type: "notify", title: "Insufficient Properties", text: "Insufficient Properties" }, log: log2 };
-      pushState(next).then(() => setTimeout(() => advanceTurn({ ...next, modal: null }), 900));
+      log.unshift(`🎡 ${player.token} landed on ${outcome.label} but has no targets.`);
+      const next = { ...gs, modal: { type: "notify", title: "Insufficient Properties", text: "No eligible properties to perform this action." }, log: log.slice(0, 25) };
+      pushState(next).then(() => setTimeout(() => {
+        const gs2 = gsRef.current;
+        pushState({ ...gs2, modal: null }).then(() => advanceTurn({ ...gs2, modal: null }));
+      }, 1500));
       return;
     }
 
