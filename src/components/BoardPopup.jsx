@@ -4,14 +4,14 @@ import { SPACES, PLAYER_COLORS, PLAYER_TOKENS } from "../constants";
 // ─────────────────────────────────────────────────────────────────────────────
 // SwapPanel (needs its own hooks, hence separate component)
 // ─────────────────────────────────────────────────────────────────────────────
-function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss }) {
+function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss, eligibleMine, eligibleTheirs }) {
     const [myPick, setMyPick] = useState(null);
     const [theirPick, setTheirPick] = useState(null);
     const myProps = Object.entries(props).filter(
-        ([, p]) => p && p.owner === myIdx,
+        ([id, p]) => p && p.owner === myIdx && eligibleMine.includes(+id),
     );
     const theirProps = Object.entries(props).filter(
-        ([, p]) => p && p.owner !== myIdx,
+        ([id, p]) => p && p.owner !== myIdx && eligibleTheirs.includes(+id),
     );
 
     return (
@@ -89,6 +89,9 @@ export default function BoardPopup({
     onSteal,
     onSwap,
     onBuildHouse,
+    onRouletteSpin,
+    eligibleStealTargets,
+    eligibleSwapMine,
     props,
     rawPlayers,
 }) {
@@ -269,7 +272,7 @@ export default function BoardPopup({
                 </p>
                 <div className="modal-scrollable">
                     {Object.entries(props).map(([id, p]) => {
-                        if (!p || p.owner === myIdx) return null;
+                        if (!p || p.owner === myIdx || !eligibleStealTargets.includes(+id)) return null;
                         const space = SPACES[+id];
                         if (!space) return null;
                         const ownerColor = PLAYER_COLORS[p.owner] || "#888";
@@ -314,7 +317,28 @@ export default function BoardPopup({
                 rawPlayers={rawPlayers}
                 onSwap={onSwap}
                 onDismiss={onDismiss}
+                eligibleMine={eligibleSwapMine}
+                eligibleTheirs={eligibleStealTargets}
             />
+        );
+    }
+
+    // Roulette
+    if (modal.type === "roulette") {
+        return (
+            <div className="board-popup modal-pop modal-center">
+                <div className="emoji-large">🎡</div>
+                <div className="section-title text-center margin-bottom-6">Roulette</div>
+                <p className="text-sm text-dim text-center margin-bottom-12">
+                    Spin the wheel for a surprise outcome.
+                </p>
+                <div className="text-xs text-light margin-bottom-10">
+                    Reward $100 • Swap Property • Reward $200 • Steal Property • Reward $150 • Better Luck Next Time
+                </div>
+                <button onClick={onRouletteSpin} className="btn-action btn-success-bg">
+                    Spin Wheel
+                </button>
+            </div>
         );
     }
 

@@ -34,6 +34,7 @@ import {
   marketGroupKey,
   randomMarketModifiers,
   freshGameState,
+  eligibleTransferPropertyIds,
 } from "./utils";
 
 // ─── AI logic ────────────────────────────────────────────────────────────────
@@ -56,6 +57,16 @@ import SettingsModal from "./components/SettingsModal";
 import { playSound } from "./soundManager";
 
 import "./game.css";
+
+
+const ROULETTE_OUTCOMES = [
+  { label: "Reward $100", type: "reward", amount: 100 },
+  { label: "Swap Property", type: "swap" },
+  { label: "Reward $200", type: "reward", amount: 200 },
+  { label: "Steal Property", type: "steal" },
+  { label: "Reward $150", type: "reward", amount: 150 },
+  { label: "Better Luck Next Time", type: "none" },
+];
 
 export default function App() {
   // ── State ──
@@ -329,11 +340,14 @@ export default function App() {
       const props = safeProps(gs);
       const log = safeLog(gs);
 
+      if (modal.type === "roulette") {
+        handleRouletteSpin();
+        return;
+      }
+
       if (modal.type === "steal") {
-        const stealable = Object.entries(props)
-          .filter(([, p]) => p && p.owner !== curIdx)
-          .map(([id]) => +id);
-        if (stealable.length) {
+        const stealable = getEligibleStealable(props, curIdx);
+        if (stealable.length && Math.random() < 0.75) {
           const targetId =
             stealable[Math.floor(Math.random() * stealable.length)];
           log.unshift(
@@ -353,13 +367,9 @@ export default function App() {
       }
 
       if (modal.type === "swap") {
-        const mine = Object.entries(props)
-          .filter(([, p]) => p && p.owner === curIdx)
-          .map(([id]) => +id);
-        const theirs = Object.entries(props)
-          .filter(([, p]) => p && p.owner !== curIdx)
-          .map(([id]) => +id);
-        if (mine.length && theirs.length) {
+        const mine = getEligibleSwapMine(props, curIdx);
+        const theirs = getEligibleStealable(props, curIdx);
+        if (mine.length && theirs.length && Math.random() < 0.75) {
           const mySpaceId = mine[Math.floor(Math.random() * mine.length)];
           const theirSpaceId =
             theirs[Math.floor(Math.random() * theirs.length)];
@@ -642,10 +652,15 @@ export default function App() {
 
     if (space.type === "go" || space.type === "jail") {
       finishTurn(null, undefined, undefined, null, false);
-    } else if (space.type === "gotojail") {
-      log.unshift(`${player.token} — Go To Jail! 🔒`);
-      players[curIdx] = { ...player, position: 10, inJail: true, jailTurns: 0 };
-      finishTurn(players, undefined, undefined, null, true);
+    } else if (space.type === "roulette") {
+      log.unshift(`${player.token} landed on Roulette! 🎡`);
+      finishTurn(
+        players,
+        undefined,
+        undefined,
+        { type: "roulette", options: ROULETTE_OUTCOMES },
+        false,
+      );
     } else if (space.type === "tax") {
       const amt = space.amount || 0;
       log.unshift(`${player.token} pays ${space.name}: $${amt}`);
@@ -1435,6 +1450,10 @@ export default function App() {
   const dismissModal = () => {
     if (!gameState?.modal) return;
     if (!isMyTurn && gameState.modal.type !== "notify") return;
+    if (gameState.modal.source === "roulette") {
+      advanceTurn({ ...gameState, modal: null });
+      return;
+    }
     pushState({ ...gameState, modal: null });
   };
 
@@ -1495,10 +1514,16 @@ export default function App() {
     });
   };
 
+  const getEligibleStealable = (props, curIdx) =>
+    eligibleTransferPropertyIds(props, (p) => p.owner !== curIdx);
+
+  const getEligibleSwapMine = (props, curIdx) =>
+    eligibleTransferPropertyIds(props, (p) => p.owner === curIdx);
+
   const handleSteal = (targetSpaceId) => {
     const gs = gsRef.current;
     const props = safeProps(gs);
-    if (!props[targetSpaceId] || props[targetSpaceId].owner === myIdx) return;
+    if (!getEligibleStealable(props, myIdx).includes(targetSpaceId)) return;
     const log = safeLog(gs);
     log.unshift(
       `${safePlayers(gs)[myIdx]?.token} stole ${SPACES[targetSpaceId]?.name}!`,
@@ -1517,6 +1542,11 @@ export default function App() {
   const handleSwap = (mySpaceId, theirSpaceId) => {
     const gs = gsRef.current;
     const props = safeProps(gs);
+    if (
+      !getEligibleSwapMine(props, myIdx).includes(mySpaceId) ||
+      !getEligibleStealable(props, myIdx).includes(theirSpaceId)
+    )
+      return;
     const myProp = props[mySpaceId],
       theirProp = props[theirSpaceId];
     if (!myProp || !theirProp) return;
@@ -1534,6 +1564,45 @@ export default function App() {
       modal: null,
       log: log.slice(0, 25),
     });
+  };
+
+  const handleRouletteSpin = () => {
+    const gs = gsRef.current;
+    if (!gs?.modal || gs.modal.type !== "roulette") return;
+    const curIdx = gs.currentPlayer;
+    const players = safePlayers(gs).map((p) => ({ ...p }));
+    const props = safeProps(gs);
+    const player = players[curIdx];
+    if (!player) return;
+    const log = safeLog(gs);
+    const outcome = ROULETTE_OUTCOMES[Math.floor(Math.random() * ROULETTE_OUTCOMES.length)];
+
+    if (outcome.type === "reward") {
+      players[curIdx] = { ...player, money: player.money + outcome.amount };
+      log.unshift(`🎡 ${player.token} spun Roulette: ${outcome.label}`);
+      const next = { ...gs, players, modal: null, log: log.slice(0, 25) };
+      pushState(next).then(() => advanceTurn(next));
+      return;
+    }
+
+    if (outcome.type === "none") {
+      log.unshift(`🎡 ${player.token} spun Roulette: Better Luck Next Time.`);
+      const next = { ...gs, modal: null, log: log.slice(0, 25) };
+      pushState(next).then(() => advanceTurn(next));
+      return;
+    }
+
+    const mine = getEligibleSwapMine(props, curIdx);
+    const theirs = getEligibleStealable(props, curIdx);
+    if (!theirs.length || (outcome.type === "swap" && !mine.length)) {
+      const log2 = ["Insufficient Properties", ...log].slice(0, 25);
+      const next = { ...gs, modal: { type: "notify", title: "Insufficient Properties", text: "Insufficient Properties" }, log: log2 };
+      pushState(next).then(() => setTimeout(() => advanceTurn({ ...next, modal: null }), 900));
+      return;
+    }
+
+    log.unshift(`🎡 ${player.token} spun Roulette: ${outcome.label}`);
+    pushState({ ...gs, modal: { type: outcome.type, source: "roulette" }, log: log.slice(0, 25) });
   };
 
   // ── Create / Join ──
@@ -2265,7 +2334,8 @@ export default function App() {
   const myProps = Object.entries(props).filter(
     ([, p]) => p && p.owner === myIdx,
   );
-
+  const eligibleStealTargets = getEligibleStealable(props, myIdx);
+  const eligibleSwapMine = getEligibleSwapMine(props, myIdx);
 
   const wealthSeries = wealthHistory.length
     ? wealthHistory
@@ -2598,6 +2668,9 @@ export default function App() {
             onSteal={handleSteal}
             onSwap={handleSwap}
             onBuildHouse={buildHouse}
+            onRouletteSpin={handleRouletteSpin}
+            eligibleStealTargets={eligibleStealTargets}
+            eligibleSwapMine={eligibleSwapMine}
             props={props}
             rawPlayers={rawPlayers}
           />
