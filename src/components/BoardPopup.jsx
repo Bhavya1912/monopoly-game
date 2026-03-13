@@ -1,31 +1,35 @@
 import { useState } from "react";
-import { SPACES, PLAYER_COLORS, PLAYER_TOKENS } from "../constants";
+import { SPACES, PLAYER_COLORS } from "../constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RouletteWheel — Visual wheel with animation
 // ─────────────────────────────────────────────────────────────────────────────
 function RouletteWheel({ outcomes, spinning, targetIndex, onComplete }) {
-    const rotation = spinning ? 1800 + (targetIndex * (360 / outcomes.length)) : (targetIndex * (360 / outcomes.length));
-    
+    const sliceAngle = 360 / outcomes.length;
+    const rotation = spinning ? 1800 + (targetIndex * sliceAngle) : (targetIndex * sliceAngle);
+    const conicGradient = outcomes.map((_, i) => 
+        `${i % 2 === 0 ? "#15803d" : "#166534"} ${i * sliceAngle}deg ${(i + 1) * sliceAngle}deg`
+    ).join(", ");
+
     return (
         <div className="wheel-container">
             <div 
                 className={`wheel ${spinning ? "spinning" : ""}`}
                 style={{ 
                     transform: `rotate(-${rotation}deg)`,
-                    transition: spinning ? "transform 4s cubic-bezier(0.15, 0, 0.15, 1)" : "none"
+                    transition: spinning ? "transform 4s cubic-bezier(0.15, 0, 0.15, 1)" : "none",
+                    background: `conic-gradient(${conicGradient})`
                 }}
                 onTransitionEnd={onComplete}
             >
                 {outcomes.map((outcome, i) => {
-                    const angle = i * (360 / outcomes.length);
+                    const midAngle = i * sliceAngle + (sliceAngle / 2);
                     return (
                         <div 
                             key={i} 
-                            className="wheel-slice"
+                            className="wheel-label-wrapper"
                             style={{ 
-                                transform: `rotate(${angle}deg)`,
-                                backgroundColor: i % 2 === 0 ? "#14532d" : "#15803d"
+                                transform: `rotate(${midAngle}deg)`
                             }}
                         >
                             <span className="wheel-label">{outcome.label}</span>
@@ -52,63 +56,68 @@ function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss, eligibleMine, 
     );
 
     return (
-        <div className="board-popup modal-pop modal-center modal-scrollable">
-            <div className="section-title text-center">
-                🔄 Swap Properties
+        <div className="board-popup modal-pop modal-center modal-wide">
+            <div className="section-title text-center margin-bottom-12">
+                🔄 Property Swap
             </div>
-            <div className="text-sm weight-bold margin-bottom-6 player-0-text">
-                Your property to give:
+            
+            <div className="modal-scrollable w-full" style={{ maxHeight: "350px" }}>
+                <div className="text-sm weight-bold margin-bottom-6 player-0-text" style={{ color: "#166534" }}>
+                    Your property to give:
+                </div>
+                <div className="swap-grid margin-bottom-16">
+                    {myProps.map(([id]) => {
+                        const s = SPACES[+id];
+                        if (!s) return null;
+                        return (
+                            <button
+                                key={id}
+                                onClick={() => setMyPick(+id)}
+                                className={`swap-card ${myPick === +id ? "selected" : ""}`}
+                                style={{ "--card-color": s.color || "#888" }}
+                            >
+                                <div className="card-color-top" />
+                                <div className="card-name-tiny">{s.name}</div>
+                            </button>
+                        );
+                    })}
+                    {myProps.length === 0 && <div className="text-xs text-dim italic">No properties available</div>}
+                </div>
+
+                <div className="text-sm weight-bold margin-bottom-6 player-1-text" style={{ color: "#1e40af" }}>
+                    Property to receive:
+                </div>
+                <div className="swap-grid">
+                    {theirProps.map(([id, p]) => {
+                        const s = SPACES[+id];
+                        if (!s) return null;
+                        return (
+                            <button
+                                key={id}
+                                onClick={() => setTheirPick(+id)}
+                                className={`swap-card ${theirPick === +id ? "selected" : ""}`}
+                                style={{ 
+                                    "--card-color": s.color || "#888",
+                                    "--owner-color": PLAYER_COLORS[p.owner]
+                                }}
+                            >
+                                <div className="card-color-top" />
+                                <div className="card-name-tiny">{s.name}</div>
+                                <div className="owner-tag">{rawPlayers[p.owner]?.token}</div>
+                            </button>
+                        );
+                    })}
+                    {theirProps.length === 0 && <div className="text-xs text-dim italic">None available</div>}
+                </div>
             </div>
-            <div className="swap-grid">
-                {myProps.map(([id]) => {
-                    const s = SPACES[+id];
-                    if (!s) return null;
-                    return (
-                        <button
-                            key={id}
-                            onClick={() => setMyPick(+id)}
-                            className={`swap-card ${myPick === +id ? "selected" : ""}`}
-                            style={{ "--card-color": s.color || "#888" }}
-                        >
-                            <div className="card-color-top" />
-                            <div className="card-name-tiny">{s.name}</div>
-                        </button>
-                    );
-                })}
-                {myProps.length === 0 && <div className="text-xs text-dim italic">No properties available</div>}
-            </div>
-            <div className="text-sm weight-bold margin-bottom-6 player-1-text">
-                Property to receive:
-            </div>
-            <div className="swap-grid">
-                {theirProps.map(([id, p]) => {
-                    const s = SPACES[+id];
-                    if (!s) return null;
-                    return (
-                        <button
-                            key={id}
-                            onClick={() => setTheirPick(+id)}
-                            className={`swap-card ${theirPick === +id ? "selected" : ""}`}
-                            style={{ 
-                                "--card-color": s.color || "#888",
-                                "--owner-color": PLAYER_COLORS[p.owner]
-                            }}
-                        >
-                            <div className="card-color-top" />
-                            <div className="card-name-tiny">{s.name}</div>
-                            <div className="owner-tag">{rawPlayers[p.owner]?.token}</div>
-                        </button>
-                    );
-                })}
-                {theirProps.length === 0 && <div className="text-xs text-dim italic">No properties available</div>}
-            </div>
-            <div className="flex-gap-8 margin-top-12">
+
+            <div className="flex-gap-8 margin-top-12 w-full">
                 <button
-                    onClick={() => myPick && theirPick && onSwap(myPick, theirPick)}
                     disabled={!myPick || !theirPick}
-                    className={`btn-action half ${!myPick || !theirPick ? "btn-gray-bg" : "btn-success-bg"}`}
+                    onClick={() => onSwap(myPick, theirPick)}
+                    className="btn-action half btn-success-bg"
                 >
-                    Confirm Swap
+                    Swap ✓
                 </button>
                 <button onClick={onDismiss} className="btn-action half btn-gray-bg">
                     Cancel
@@ -143,23 +152,21 @@ export default function BoardPopup({
 }) {
     if (!modal) return null;
 
+    let content = null;
+
     // Jail
     if (modal.type === "jail") {
         const player = players[myIdx];
         if (!player) return null;
         const hasCard = (player.jailFreeCards || 0) > 0;
-        return (
+        content = (
             <div className="board-popup modal-pop modal-center">
-                <div className="emoji-large">
-                    🔒
-                </div>
-                <div className="section-title text-center margin-bottom-4">
-                    You're in Jail!
-                </div>
+                <div className="emoji-large">🔒</div>
+                <div className="section-title text-center margin-bottom-4">You're in Jail!</div>
                 <div className="menu-subtitle text-center margin-bottom-12">
                     Turn {(player.jailTurns || 0) + 1}/3 — Choose an option:
                 </div>
-                <div className="flex-column gap-8">
+                <div className="flex-column gap-8 w-full">
                     {hasCard && (
                         <button onClick={onUseJailCard} className="btn-action btn-purple-bg">
                             🃏 Use Get Out of Jail Free Card
@@ -181,30 +188,23 @@ export default function BoardPopup({
     }
 
     // Buy property
-    if (modal.type === "buy") {
+    else if (modal.type === "buy") {
         const space = SPACES[modal.spaceId];
         const p = rawPlayers[modal.playerIdx];
         const isMe = modal.playerIdx === myIdx;
         if (!space || !p) return null;
-        return (
+        content = (
             <div className="board-popup modal-pop modal-center">
-                <div className="emoji-large">
-                    🏠
-                </div>
-                <div className="section-title text-center margin-bottom-2">
-                    {space.name}
-                </div>
+                <div className="emoji-large">🏠</div>
+                <div className="section-title text-center margin-bottom-2">{space.name}</div>
                 {space.color && (
-                    <div
-                        className="color-bar"
-                        style={{ "--space-color": space.color }}
-                    />
+                    <div className="color-bar" style={{ "--space-color": space.color }} />
                 )}
                 <div className="text-md text-center margin-bottom-10">
                     Price: <strong className="weight-bold">${space.price}</strong>
                 </div>
                 {isMe ? (
-                    <>
+                    <div className="w-full">
                         <div className="text-xs text-light text-center margin-bottom-10">
                             Your balance: ${p.money.toLocaleString()}
                         </div>
@@ -220,7 +220,7 @@ export default function BoardPopup({
                                 Pass ✗
                             </button>
                         </div>
-                    </>
+                    </div>
                 ) : (
                     <p className="text-sm text-light text-center margin-0">
                         {p.token} P{p.id + 1} is deciding...
@@ -231,22 +231,17 @@ export default function BoardPopup({
     }
 
     // Build house
-    if (modal.type === "build") {
+    else if (modal.type === "build") {
         const space = SPACES[modal.spaceId];
         const prop = props[modal.spaceId];
         if (!space || !prop) return null;
         const houses = prop.houses || 0;
         const canBuild = !prop.hotel && modal.canBuild;
-        return (
+        content = (
             <div className="board-popup modal-pop modal-center">
-                <div className="section-title margin-bottom-4">
-                    {space.name}
-                </div>
+                <div className="section-title margin-bottom-4">{space.name}</div>
                 {space.color && (
-                    <div
-                        className="color-bar"
-                        style={{ "--space-color": space.color }}
-                    />
+                    <div className="color-bar" style={{ "--space-color": space.color }} />
                 )}
                 <div className="text-sm margin-bottom-8">
                     {prop.hotel
@@ -258,7 +253,7 @@ export default function BoardPopup({
                 <div className="text-sm text-light margin-bottom-10">
                     Build cost: ${space.houseCost}/house
                 </div>
-                <div className="flex-gap-8">
+                <div className="flex-gap-8 w-full">
                     {canBuild && (
                         <button
                             onClick={() => onBuildHouse(modal.spaceId)}
@@ -267,7 +262,7 @@ export default function BoardPopup({
                             {houses >= 4 ? "🏨 Build Hotel" : "🏠 Build House"}
                         </button>
                     )}
-                    <button onClick={onDismiss} className="btn-action half btn-gray-bg">
+                    <button onClick={onDismiss} className={`btn-action ${canBuild ? "half" : "w-full"} btn-gray-bg`}>
                         Close
                     </button>
                 </div>
@@ -280,43 +275,31 @@ export default function BoardPopup({
         );
     }
 
-    // Card (Chance / Community)
-    if (modal.type === "card") {
-        return (
+    // Card
+    else if (modal.type === "card") {
+        content = (
             <div className="board-popup modal-pop modal-center">
                 <div className="emoji-large">
                     {modal.title?.startsWith("❓") ? "❓" : "📋"}
                 </div>
-                <div className="section-title text-center margin-bottom-6">
-                    {modal.title}
-                </div>
-                <p className="text-md text-center style-italic margin-bottom-12">
-                    "{modal.text}"
-                </p>
+                <div className="section-title text-center margin-bottom-6">{modal.title}</div>
+                <p className="text-md text-center style-italic margin-bottom-12">"{modal.text}"</p>
                 {isMyTurn ? (
-                    <button onClick={onDismiss} className="btn-action btn-success-bg">
-                        OK
-                    </button>
+                    <button onClick={onDismiss} className="btn-action btn-success-bg w-full">OK</button>
                 ) : (
-                    <p className="text-xs text-light text-center margin-0">
-                        Waiting for current player...
-                    </p>
+                    <p className="text-xs text-light text-center margin-0">Waiting for current player...</p>
                 )}
             </div>
         );
     }
 
     // Steal
-    if (modal.type === "steal") {
-        return (
+    else if (modal.type === "steal") {
+        content = (
             <div className="board-popup modal-pop modal-center">
-                <div className="section-title text-center margin-bottom-8">
-                    🃏 Steal a Property!
-                </div>
-                <p className="text-sm text-dim text-center margin-bottom-12">
-                    Pick an opponent's property to take for free:
-                </p>
-                <div className="modal-scrollable">
+                <div className="section-title text-center margin-bottom-8">🃏 Steal a Property!</div>
+                <p className="text-sm text-dim text-center margin-bottom-12">Pick an opponent's property to take for free:</p>
+                <div className="modal-scrollable w-full">
                     <div className="swap-grid">
                         {Object.entries(props).map(([id, p]) => {
                             if (!p || p.owner === myIdx || !eligibleStealTargets.includes(+id)) return null;
@@ -328,10 +311,7 @@ export default function BoardPopup({
                                     key={id}
                                     onClick={() => onSteal(+id)}
                                     className="swap-card"
-                                    style={{ 
-                                        "--card-color": space.color || "#888",
-                                        "--owner-color": ownerColor
-                                    }}
+                                    style={{ "--card-color": space.color || "#888", "--owner-color": ownerColor }}
                                 >
                                     <div className="card-color-top" />
                                     <div className="card-name-tiny">{space.name}</div>
@@ -339,22 +319,17 @@ export default function BoardPopup({
                                 </button>
                             );
                         })}
-                        {eligibleStealTargets.length === 0 && <div className="text-xs text-dim italic text-center w-full">No properties available to steal</div>}
+                        {eligibleStealTargets.length === 0 && <div className="text-xs text-dim italic text-center w-full">No properties available</div>}
                     </div>
                 </div>
-                <button
-                    onClick={onDismiss}
-                    className="btn-action btn-gray-bg margin-top-8"
-                >
-                    Skip
-                </button>
+                <button onClick={onDismiss} className="btn-action btn-gray-bg margin-top-8 w-full">Skip</button>
             </div>
         );
     }
 
     // Swap
-    if (modal.type === "swap") {
-        return (
+    else if (modal.type === "swap") {
+        content = (
             <SwapPanel
                 props={props}
                 myIdx={myIdx}
@@ -368,64 +343,49 @@ export default function BoardPopup({
     }
 
     // Roulette
-    if (modal.type === "roulette") {
+    else if (modal.type === "roulette") {
         const isSpinning = modal.isSpinning;
         const targetIdx = modal.targetIdx ?? 0;
-        
-        return (
+        content = (
             <div className="board-popup modal-pop modal-center roulette-modal">
                 <div className="section-title text-center margin-bottom-6">🎡 Roulette Wheel</div>
-                <p className="text-xs text-dim text-center margin-bottom-12">
-                    Test your luck for grand rewards or strategic steals!
-                </p>
-                
+                <p className="text-xs text-dim text-center margin-bottom-12">Test your luck!</p>
                 <RouletteWheel 
                     outcomes={modal.options} 
                     spinning={isSpinning}
                     targetIndex={targetIdx}
-                    onComplete={() => {
-                        if (isSpinning && isMyTurn) {
-                            setTimeout(onRouletteSpin, 800); // Trigger finish logic
-                        }
-                    }}
+                    onComplete={() => { if (isSpinning && isMyTurn) setTimeout(onRouletteSpin, 800); }}
                 />
-
-                <div className="margin-top-12">
+                <div className="margin-top-12 w-full">
                     {!isSpinning ? (
-                        <button 
-                            onClick={onRouletteSpin} 
-                            className="btn-action btn-success-bg"
-                            disabled={!isMyTurn}
-                        >
-                            {isMyTurn ? "SPIN NOW! 🎲" : "Waiting for player..."}
+                        <button onClick={onRouletteSpin} className="btn-action btn-success-bg w-full" disabled={!isMyTurn}>
+                            {isMyTurn ? "SPIN NOW! 🎲" : "Waiting..."}
                         </button>
                     ) : (
-                        <div className="text-md weight-bold text-success text-center animate-pulse">
-                            SPINNING...
-                        </div>
+                        <div className="text-md weight-bold text-success text-center animate-pulse">SPINNING...</div>
                     )}
                 </div>
             </div>
         );
     }
 
-    // Notification
-    if (modal.type === "notify") {
-        return (
+    // Notify
+    else if (modal.type === "notify") {
+        content = (
             <div className="board-popup modal-pop modal-notify modal-center">
-                <div className="section-title margin-bottom-4">
-                    {modal.title}
-                </div>
-                <div className="text-sm text-dim">{modal.text}</div>
-                <button
-                    onClick={onDismiss}
-                    className="btn-action btn-success-bg margin-top-8 text-xs padding-y-4 padding-x-12"
-                >
-                    OK
-                </button>
+                <div className="section-title margin-bottom-4">{modal.title}</div>
+                <div className="text-sm text-dim margin-bottom-12">{modal.text}</div>
+                <button onClick={onDismiss} className="btn-action btn-success-bg w-full">OK</button>
             </div>
         );
     }
 
-    return null;
+    if (!content) return null;
+
+    return (
+        <>
+            <div className="modal-backdrop" onClick={modal.type === "notify" || modal.type === "card" || modal.type === "build" ? onDismiss : undefined} />
+            {content}
+        </>
+    );
 }

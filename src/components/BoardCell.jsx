@@ -11,6 +11,8 @@ export default function BoardCell({
   onClick,
   flashCell,
   bouncingPlayer,
+  width,
+  height,
 }) {
   const space = SPACES[spaceId];
   if (!space) return <div className="h-full w-full" />;
@@ -23,18 +25,25 @@ export default function BoardCell({
 
   const ownerColor = prop ? PLAYER_COLORS[prop.owner] : null;
 
-
   const shortName = space.name
     .replace(/ Avenue$/i, "")
     .replace(/ Ave$/i, "")
     .replace(/ Place$/i, "")
     .replace(/ Gardens$/i, "")
+    .replace(/ Railroad$/i, " RR")
+    .replace(/ Company$/i, " Co")
     .replace("Pennsylvania", "PA")
     .replace("North Carolina", "NC")
-    .replace("Reading Railroad", "Reading RR")
+    .replace("Community Chest", "Comm. Chest")
     .replace("Jail / Just Visiting", "Jail");
 
   const isCorner = ["go", "jail", "freeparking", "go-to-jail"].includes(space.type);
+
+  // Use the length of the *short* name to decide if we need the smaller font
+  const nameLen = shortName.length;
+  let nameClass = "";
+  if (nameLen >= 11) nameClass = "very-long-name";
+  else if (nameLen >= 8) nameClass = "long-name";
 
   const tileFigure =
     space.type === "go"
@@ -53,47 +62,59 @@ export default function BoardCell({
                   ? "🎡"
                   : null;
 
+  // Rotation side logic
+  const side =
+    spaceId > 0 && spaceId < 10 ? "bottom" :
+    spaceId > 10 && spaceId < 20 ? "left" :
+    spaceId > 20 && spaceId < 30 ? "top" :
+    spaceId > 30 && spaceId < 40 ? "right" : "corner";
+
   return (
     <div
       onClick={onClick}
-      className={`board-cell board-cell-hover bg-${space.type} ${isFlash ? "cell-pulse" : ""} ${isSelected ? "cell-selected" : ""} ${!isSelected && ownerColor ? "has-owner" : ""} ${isCorner ? "corner-cell" : ""}`}
+      className={`board-cell board-cell-hover bg-${space.type} cell-side-${side} ${isFlash ? "cell-pulse" : ""} ${isSelected ? "cell-selected" : ""} ${!isSelected && ownerColor ? "has-owner" : ""} ${isCorner ? "corner-cell" : ""}`}
       style={{
         "--owner-color": ownerColor,
         "--owner-glow": ownerColor ? `${ownerColor}55` : "transparent",
         "--space-color": space.color,
+        "--cell-w": `${width}px`,
+        "--cell-h": `${height}px`,
       }}
     >
-      {/* Color band */}
-      {space.type === "property" && space.color && (
-        <div className="cell-color-band" />
-      )}
-      {/* Owner dot overlay */}
-      {ownerColor && (
-        <div
-          className={`cell-owner-dot ${space.type === "property" ? "owner-dot-prop" : "owner-dot-other"}`}
-        />
-      )}
-      <div className={`cell-name ${space.name.length > 12 ? "long-name" : ""}`}>
-        {shortName}
-      </div>
-      {tileFigure && (
-        <div className={`cell-figure ${isCorner ? "corner-figure" : ""}`}>
-          {tileFigure}
+      {/* Container for rotation to maintain layout within square grid */}
+      <div className="cell-content">
+        {/* Color band */}
+        {space.type === "property" && space.color && (
+          <div className="cell-color-band" />
+        )}
+        {/* Owner dot overlay */}
+        {ownerColor && (
+          <div
+            className={`cell-owner-dot ${space.type === "property" ? "owner-dot-prop" : "owner-dot-other"}`}
+          />
+        )}
+        <div className={`cell-name ${nameClass}`}>
+          {shortName}
         </div>
-      )}
-      <div className="cell-price">{space.price ? `$${space.price}` : ""}</div>
-      <div className="cell-buildings">
-        {prop ? (prop.hotel ? "🏨" : "🏠".repeat(prop.houses || 0)) : ""}
-      </div>
-      <div className="cell-tokens">
-        {here.map((p) => (
-          <span
-            key={p.id}
-            className={`cell-token ${bouncingPlayer === p.id ? "token-bounce" : ""}`}
-          >
-            {p.token}
-          </span>
-        ))}
+        {tileFigure && (
+          <div className={`cell-figure ${isCorner ? "corner-figure" : ""}`}>
+            {tileFigure}
+          </div>
+        )}
+        <div className="cell-price">{space.price ? `$${space.price}` : ""}</div>
+        <div className="cell-buildings">
+          {prop ? (prop.hotel ? "🏨" : "🏠".repeat(prop.houses || 0)) : ""}
+        </div>
+        <div className="cell-tokens">
+          {here.map((p) => (
+            <span
+              key={p.id}
+              className={`cell-token ${bouncingPlayer === p.id ? "token-bounce" : ""}`}
+            >
+              {p.token}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

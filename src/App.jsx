@@ -607,6 +607,15 @@ export default function App() {
 
     const finishTurn = (updP, updProps, updFP, modal, forceEnd) => {
       const finalPlayers = updP || players;
+
+      // Lock visual positions for anyone who teleported (e.g. via Cards)
+      finalPlayers.forEach((p, i) => {
+        const old = players[i];
+        if (old && p && old.position !== p.position) {
+          setVisualPositions((prev) => ({ ...prev, [p.id]: old.position }));
+        }
+      });
+
       // Decrement special-effect counters
       finalPlayers.forEach((p, i) => {
         if (p && (p.doubleRentTurns || 0) > 0)
@@ -948,6 +957,7 @@ export default function App() {
       rolling: false,
     };
     const TOTAL_ANIM_MS = steps * 200 + 300;
+    setVisualPositions((prev) => ({ ...prev, [player.id]: oldPos }));
     pushState(newGs).then(() => {
       setTimeout(
         () => doSpaceAction(newPos, updPlayer, newGs, props, isDouble),
@@ -1126,6 +1136,7 @@ export default function App() {
           inJail: true,
           jailTurns: 0,
         };
+        setVisualPositions((prev) => ({ ...prev, [player.id]: player.position }));
         pushState({
           ...gs,
           players,
@@ -1884,26 +1895,18 @@ export default function App() {
   const baseBoardSize = 550;
   const isPhone = windowWidth < 600;
   const isTablet = windowWidth >= 600 && windowWidth < 1024;
-  const horizontalPadding = isPhone ? 22 : isTablet ? 32 : 40;
-  const widthRatio = isPhone || isTablet ? 1 : 0.5;
+  const horizontalPadding = isPhone ? 0 : isTablet ? 32 : 60;
+  const widthRatio = isPhone || isTablet ? 1 : 0.6; // Increased from 0.5 to 0.6
   const targetBoardWidth = Math.max(280, (windowWidth - horizontalPadding) * widthRatio);
-  const maxByHeight = Math.max(280, windowHeight * (isPhone ? 0.5 : 0.72));
+  const maxByHeight = Math.max(280, windowHeight * (isPhone ? 0.95 : 0.85)); // Increased height allowance
   const boardPixelSize = Math.min(targetBoardWidth, maxByHeight);
   const adaptiveScale = boardPixelSize / baseBoardSize;
-  const phoneScale = Math.max(0.48, Math.min(0.68, (windowWidth - 30) / baseBoardSize));
-  const tabletScale = layoutFocus === "board" ? 0.86 : 0.76;
-  const desktopScale = Math.max(
-    0.8,
-    Math.min(1.5, (windowWidth * 0.4) / baseBoardSize, (windowHeight * 0.78) / baseBoardSize),
-  );
+  
   const boardScale = isPhone
-    ? Math.min(phoneScale, adaptiveScale)
+    ? adaptiveScale
     : isTablet
-      ? Math.min(tabletScale, adaptiveScale)
-      : Math.min(
-        layoutFocus === "board" ? desktopScale : Math.max(0.8, desktopScale - 0.18),
-        adaptiveScale,
-      );
+      ? Math.min(0.95, adaptiveScale)
+      : Math.min(1.4, adaptiveScale);
   const CORNER = Math.round(68 * boardScale),
     CELL = Math.round(46 * boardScale);
   const cols = [CORNER, ...Array(9).fill(CELL), CORNER];
@@ -2636,6 +2639,8 @@ export default function App() {
                   players={displayPlayers}
                   properties={props}
                   isSelected={selectedSpace === id}
+                  width={cols[gridColumn - 1]}
+                  height={rows[gridRow - 1]}
                   onClick={() => {
                     // Toggle selection — any space is clickable for info
                     setSelectedSpace((prev) => (prev === id ? null : id));
@@ -2647,9 +2652,17 @@ export default function App() {
             ))}
             {/* Center */}
             <div className="board-center">
-              <div className="board-title">
-                MONOPOLY
+              <div className="board-center-decals">
+                <div className="decal community-decal">
+                  <span className="decal-icon">🎁</span>
+                  <span className="decal-label">COMMUNITY CHEST</span>
+                </div>
+                <div className="decal chance-decal">
+                  <span className="decal-icon">?</span>
+                  <span className="decal-label">CHANCE</span>
+                </div>
               </div>
+              <div className="board-title">MONOPOLY</div>
               <div className="free-parking-label">
                 🅿️ ${gameState.freePot || 0}
               </div>

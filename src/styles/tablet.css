@@ -6,13 +6,19 @@
     }
 
     .game-layout {
+        flex-direction: column;
         align-items: center;
+        justify-content: flex-start;
     }
 
     .board-wrap {
-        width: 100%;
-        max-width: 100%;
-        padding: 8px;
+        width: 100vw;
+        margin-left: -12px; /* Offset the 12px padding of game-root */
+        flex-shrink: 0;
+        aspect-ratio: 1 / 1;
+        display: flex;
+        justify-content: center;
+        padding: 0;
     }
 
     .right-panel {
