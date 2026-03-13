@@ -240,7 +240,7 @@ export const SPACES = [
     rent: [24, 120, 360, 850, 1025, 1200],
     houseCost: 150,
   },
-  { id: 30, name: "Go To Jail", type: "gotojail", color: null, price: null },
+  { id: 30, name: "Roulette", type: "roulette", color: null, price: null },
   {
     id: 31,
     name: "Pacific Ave",

@@ -91,6 +91,23 @@ export function marketGroupKey(space) {
   return null;
 }
 
+/** True when a property belongs to a completed color set for its current owner. */
+export function isPropertyInCompleteSet(spaceId, props) {
+  const prop = props?.[spaceId];
+  if (!prop) return false;
+  const space = SPACES[spaceId];
+  if (!space || space.type !== "property" || !space.color) return false;
+  const group = COLOR_GROUPS[space.color] || [];
+  return group.length > 0 && group.every((id) => props[id]?.owner === prop.owner);
+}
+
+/** Properties a player can trade/steal (not in complete sets). */
+export function eligibleTransferPropertyIds(props, predicate) {
+  return Object.entries(props || {})
+    .filter(([id, prop]) => prop && predicate(prop, +id) && !isPropertyInCompleteSet(+id, props))
+    .map(([id]) => +id);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Game state factory
 // ─────────────────────────────────────────────────────────────────────────────

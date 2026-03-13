@@ -41,9 +41,11 @@ export default function BoardCell({
         ? "🧑‍✈️"
         : space.type === "freeparking"
           ? "🧘"
-          : space.type === "chance"
+           : space.type === "chance"
             ? "🃏"
-            : null;
+            : space.type === "roulette"
+              ? "🎡"
+              : null;
 
   return (
     <div
