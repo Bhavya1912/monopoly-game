@@ -650,14 +650,31 @@
 }
 
 .btn-end {
-    background: #6366f1;
     color: #fff;
     border: none;
     padding: 12px 24px;
     border-radius: 8px;
     font-weight: 800;
     cursor: pointer;
+    transition: all 0.15s;
+    background: #94a3b8;
+    box-shadow: 0 4px 0 #64748b;
+    opacity: 0.6;
+}
+
+.btn-end-active {
+    background: #6366f1;
     box-shadow: 0 4px 0 #4338ca;
+    opacity: 1;
+}
+
+.btn-end-active:hover {
+    filter: brightness(1.1);
+}
+
+.btn-end-active:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #4338ca;
 }
 
 .btn-dim {

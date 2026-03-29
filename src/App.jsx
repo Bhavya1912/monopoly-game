@@ -2777,7 +2777,11 @@ export default function App() {
                       processing ||
                       !!sellToPay
                     }
-                    className="btn-end"
+                    className={`btn-end ${
+                      (!isMyTurn || !gameState.rolled || processing || sellToPay) 
+                        ? ""
+                        : "btn-end-active"
+                    }`}
                   >
                     End →
                   </button>
