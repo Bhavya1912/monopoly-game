@@ -119,7 +119,7 @@ function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss, eligibleMine, 
                 >
                     Swap ✓
                 </button>
-                <button onClick={onDismiss} className="btn-action half btn-gray-bg">
+                <button onClick={onDismiss} className="btn-action half btn-gray-bg" style={{ cursor: "pointer" }}>
                     Cancel
                 </button>
             </div>
@@ -322,7 +322,7 @@ export default function BoardPopup({
                         {eligibleStealTargets.length === 0 && <div className="text-xs text-dim italic text-center w-full">No properties available</div>}
                     </div>
                 </div>
-                <button onClick={onDismiss} className="btn-action btn-gray-bg margin-top-8 w-full">Skip</button>
+                <button onClick={onDismiss} className="btn-action btn-gray-bg margin-top-8 w-full" style={{ cursor: "pointer" }}>Skip</button>
             </div>
         );
     }
