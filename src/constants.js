@@ -491,7 +491,7 @@ export const ROUND_EVENTS = [
 // ─────────────────────────────────────────────────────────────────────────────
 // Player constants
 // ─────────────────────────────────────────────────────────────────────────────
-export const PLAYER_COLORS = ["#E74C3C", "#3498DB", "#27AE60", "#F39C12"];
+export const PLAYER_COLORS = ["#2563eb", "#dc2626", "#16a34a", "#d97706"];
 export const PLAYER_TOKENS = ["🎩", "🚢", "🏎️", "🐶"];
 
 export const CELL_POSITIONS = [];
