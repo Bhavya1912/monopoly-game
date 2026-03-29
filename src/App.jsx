@@ -141,6 +141,30 @@ export default function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // ── URL Routing — Handle /ROOMCODE or /AI deep-linking ──
+  useEffect(() => {
+    const path = window.location.pathname.slice(1).toUpperCase();
+    if (path === "AI") {
+      startAIGame();
+    } else if (path && path.length >= 4 && path.length <= 6) {
+      joinGame(path);
+    }
+  }, []); // Run once on mount
+
+  // Sync state to URL
+  useEffect(() => {
+    const currentPath = window.location.pathname.slice(1).toUpperCase();
+    if (isLocalGame) {
+      if (currentPath !== "AI") window.history.pushState({}, "", "/AI");
+    } else {
+      if (roomCode && roomCode !== currentPath) {
+        window.history.pushState({}, "", `/${roomCode}`);
+      } else if (!roomCode && currentPath) {
+        window.history.pushState({}, "", "/");
+      }
+    }
+  }, [roomCode, isLocalGame]);
+
   useEffect(() => {
     if (windowWidth >= 600 && mobileChatOpen) setMobileChatOpen(false);
   }, [windowWidth, mobileChatOpen]);
@@ -1712,8 +1736,10 @@ export default function App() {
     setScreen("waiting");
   };
 
-  const joinGame = async () => {
-    const code = joinCode.toUpperCase().trim();
+  const joinGame = async (optionalCode) => {
+    const code = (typeof optionalCode === "string" ? optionalCode : joinCode)
+      .toUpperCase()
+      .trim();
     if (code.length < 4) {
       setError("Enter a valid room code");
       return;
