@@ -68,6 +68,8 @@ const ROULETTE_OUTCOMES = [
   { label: "Better Luck Next Time", type: "none" },
 ];
 
+const PROPERTY_ACTION_TYPES = ["property", "railroad", "utility"];
+
 export default function App() {
   // ── State ──
   const [screen, setScreen] = useState("lobby");
@@ -593,6 +595,10 @@ export default function App() {
 
   // ── Space action handler ──
   const doSpaceAction = (spaceId, player, gs, props, isDouble) => {
+    // Ensure property-related UI from a previous selection does not remain open
+    // when resolving non-property tiles (especially corners).
+    setSelectedSpace(null);
+
     const space = SPACES[spaceId];
     if (!space) {
       pushState({ ...gs, rolled: true, rolling: false });
@@ -782,11 +788,7 @@ export default function App() {
         { type: "card", title: "📋 Community Chest!", text: card.text },
         false,
       );
-    } else if (
-      space.type === "property" ||
-      space.type === "railroad" ||
-      space.type === "utility"
-    ) {
+    } else if (PROPERTY_ACTION_TYPES.includes(space.type)) {
       const prop = props[spaceId];
       if (!prop) {
         // AI auto-decides
@@ -3278,6 +3280,7 @@ export default function App() {
             };
 
             const handleCardBuy = () => {
+              if (!PROPERTY_ACTION_TYPES.includes(selSpace.type)) return;
               if (!isMyTurn || selProp || !playerIsOnSpace) return;
               setSelectedSpace(null);
               pushState({
@@ -3297,7 +3300,7 @@ export default function App() {
                 playerIsOnSpace={playerIsOnSpace}
                 onClose={() => setSelectedSpace(null)}
                 onBuild={isMyLandedProp && hasMonopoly ? handleCardBuild : null}
-                onBuy={selSpace.price && !selProp && isMyTurn && playerIsOnSpace ? handleCardBuy : null}
+                onBuy={PROPERTY_ACTION_TYPES.includes(selSpace.type) && selSpace.price && !selProp && isMyTurn && playerIsOnSpace ? handleCardBuy : null}
               />
             );
           })()}
