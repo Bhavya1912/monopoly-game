@@ -487,7 +487,7 @@ export default function App() {
             version: currentVersion + 1,
           };
         },
-        { applyLocally: false },
+        { applyLocally: true },
       ).then((res) => res.committed);
     },
     [roomCode],
@@ -1143,7 +1143,7 @@ export default function App() {
     log.unshift(
       `${player.token} rolls ${d1}+${d2}=${d1 + d2}${isDouble ? " 🎲 Doubles!" : ""}`,
     );
-    pushState({ ...gs, rolling: true, log: log.slice(0, 25) });
+    pushState({ ...gs, rolling: true, dice: [d1, d2], log: log.slice(0, 25) });
 
     setTimeout(() => {
       if (newDC === 3) {
