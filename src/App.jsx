@@ -1701,7 +1701,7 @@ export default function App() {
     const result = await runTransaction(
       ref(db, `games/${code}`),
       (current) => {
-        if (!current) return;
+        if (!current) return current;
 
         const lobbyCount = current.lobby ? Object.keys(current.lobby).length : 0;
         const maxPlayers = current.state?.hostPlayerCount || 2;
