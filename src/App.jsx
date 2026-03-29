@@ -884,16 +884,20 @@ export default function App() {
           finishTurn(players, undefined, undefined, null, false);
         }
       } else {
-        // Own property — open the property card so player can choose to build
+        // Own property
         const group = COLOR_GROUPS[space.color] || [];
         const hasMonopoly =
           space.type === "property" &&
           group.every((id) => props[id]?.owner === curIdx);
+          
+        log.unshift(`🏠 ${player.token} rests on their own property (${space.name}).`);
+
         if (!player.isAI) {
-          // Open the property card; build button lives inside it
           finishTurn(null, undefined, undefined, null, false);
-          // Use a short delay so finishTurn writes to Firebase first
-          setTimeout(() => setSelectedSpace(spaceId), 350);
+          // Only auto-open the card if the player has a monopoly and could potentially build
+          if (hasMonopoly) {
+            setTimeout(() => setSelectedSpace(spaceId), 350);
+          }
         } else {
           // AI: auto-build using personality/difficulty logic
           if (
