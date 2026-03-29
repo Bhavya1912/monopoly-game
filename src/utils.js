@@ -76,7 +76,8 @@ export function estimatePropertyRent(spaceId, prop, props) {
 export function randomMarketModifiers() {
   const modifiers = { railroad: 1, utility: 1 };
   Object.keys(COLOR_GROUPS).forEach((color) => {
-    modifiers[color] = +(0.8 + Math.random() * 0.5).toFixed(2);
+    const safeColor = color.replace("#", "");
+    modifiers[safeColor] = +(0.8 + Math.random() * 0.5).toFixed(2);
   });
   modifiers.railroad = +(0.85 + Math.random() * 0.4).toFixed(2);
   modifiers.utility = +(0.85 + Math.random() * 0.4).toFixed(2);
@@ -85,7 +86,7 @@ export function randomMarketModifiers() {
 
 export function marketGroupKey(space) {
   if (!space) return null;
-  if (space.type === "property") return space.color;
+  if (space.type === "property") return space.color ? space.color.replace("#", "") : null;
   if (space.type === "railroad") return "railroad";
   if (space.type === "utility") return "utility";
   return null;
