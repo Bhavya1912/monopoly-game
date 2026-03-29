@@ -735,9 +735,20 @@ export default function App() {
           false,
         );
       } else if (specialEffect?.type === "steal") {
-        finishTurn(players, undefined, undefined, { type: "steal" }, false);
+        const stealable = Object.entries(props).filter(([, p]) => p && p.owner !== curIdx);
+        if (!stealable.length) {
+          finishTurn(players, undefined, undefined, { type: "notify", title: "Nothing to Steal!", text: "No opponent properties exist yet. The board is wide open!" }, false);
+        } else {
+          finishTurn(players, undefined, undefined, { type: "steal" }, false);
+        }
       } else if (specialEffect?.type === "swap") {
-        finishTurn(players, undefined, undefined, { type: "swap" }, false);
+        const stealable = Object.entries(props).filter(([, p]) => p && p.owner !== curIdx);
+        const mine = Object.entries(props).filter(([, p]) => p && p.owner === curIdx);
+        if (!stealable.length || !mine.length) {
+          finishTurn(players, undefined, undefined, { type: "notify", title: "Nothing to Swap!", text: "Both players need properties to swap. Come back later!" }, false);
+        } else {
+          finishTurn(players, undefined, undefined, { type: "swap" }, false);
+        }
       } else if (specialEffect?.type === "forceTransfer") {
         const tid = specialEffect.targetId;
         const cheapest = Object.entries(props).find(
