@@ -159,3 +159,84 @@ export function freshGameState(
     gameStartTime: Date.now(),
   };
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Game Logic Calculations (Strategy & Risk)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Probability of a player completing a specific monopoly color group. */
+export function calculateMonopolyChance(player, pid, color, ids, props, rawPlayers) {
+  const owned = ids.filter((id) => props[id]?.owner === pid).length;
+  const blocked = ids.filter((id) => props[id] && props[id].owner !== pid).length;
+  const playersAlive = rawPlayers.filter((p) => p && !p.bankrupt).length || 1;
+  const ownRatio = owned / ids.length;
+  const moneyFactor = clamp((player.money || 0) / 2200, 0, 1);
+  let chance =
+    ownRatio * 70 + moneyFactor * 15 + ((4 - playersAlive) / 3) * 6 - blocked * 12;
+  if (owned === ids.length - 1) chance += 14;
+  if (owned === 0) chance *= 0.45;
+  return Math.round(clamp(chance, 2, 95));
+}
+
+/** Risk of bankruptcy based on cash and upcoming property rent exposures. */
+export function calculateBankruptcyRisk(player, pid, props) {
+  const cash = Math.max(player.money || 1, 1);
+  const lookAhead = Array.from(
+    { length: 8 },
+    (_, i) => (player.position + i + 1) % 40,
+  );
+  const expectedRentExposure =
+    lookAhead.reduce((sum, id) => {
+      const prop = props[id];
+      if (!prop || prop.owner === pid) return sum;
+      return sum + estimatePropertyRent(id, prop, props);
+    }, 0) / 8;
+  const oppStrength =
+    Object.entries(props).reduce((sum, [id, prop]) => {
+      if (!prop || prop.owner === pid) return sum;
+      const upgrades = (prop.houses || 0) + (prop.hotel ? 5 : 0);
+      return sum + estimatePropertyRent(+id, prop, props) * (1 + upgrades * 0.12);
+    }, 0) / 40;
+  return Math.round(
+    clamp(((expectedRentExposure + oppStrength) / cash) * 100, 5, 98),
+  );
+}
+
+/** Get insights about completed color sets and their income potential. */
+export function getColorSetInsights(props) {
+  return Object.entries(COLOR_GROUPS)
+    .map(([color, ids]) => {
+      const owner = props[ids[0]]?.owner;
+      const monopoly =
+        owner !== undefined && ids.every((id) => props[id]?.owner === owner);
+      if (!monopoly) return null;
+      const rents = ids.map((id) => estimatePropertyRent(id, props[id], props));
+      const incomePotential = rents.reduce((a, b) => a + b, 0);
+      const upgrades = ids.reduce(
+        (n, id) => n + (props[id]?.houses || 0) + (props[id]?.hotel ? 5 : 0),
+        0,
+      );
+      return {
+        color,
+        owner,
+        ids,
+        incomePotential,
+        upgrades,
+        topRent: Math.max(...rents, 0),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.incomePotential - a.incomePotential);
+}
+
+/** Identify the top 3 most dangerous properties based on current rent. */
+export function getDangerousZones(props) {
+  return Object.entries(props)
+    .map(([id, prop]) => ({
+      id: +id,
+      owner: prop?.owner,
+      rent: estimatePropertyRent(+id, prop, props),
+    }))
+    .filter((z) => z.rent > 0)
+    .sort((a, b) => b.rent - a.rent)
+    .slice(0, 3);
+}

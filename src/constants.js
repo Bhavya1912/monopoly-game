@@ -516,12 +516,43 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const COLOR_LABELS = {
-  "#8B4513": "Brown",
-  "#87CEEB": "Light Blue",
-  "#FF69B4": "Pink",
-  "#FFA500": "Orange",
-  "#FF0000": "Red",
-  "#FFFF00": "Yellow",
-  "#00FF00": "Green",
   "#0000FF": "Dark Blue",
+};
+
+export const DIFF_INFO = {
+  easy: {
+    label: "Easy",
+    emoji: "🟢",
+    desc: "Buys casually, builds slowly",
+  },
+  medium: {
+    label: "Medium",
+    emoji: "🟡",
+    desc: "Balanced — competes seriously",
+  },
+  hard: { label: "Hard", emoji: "🟠", desc: "Monopoly-focused, long-term" },
+  strategic: {
+    label: "Strategic",
+    emoji: "🔴",
+    desc: "Calculates risk, targets leaders",
+  },
+};
+
+export const PERS_INFO = {
+  aggressive: {
+    label: "Aggressive",
+    emoji: "⚔️",
+    desc: "Buys everything, builds fast",
+  },
+  conservative: {
+    label: "Conservative",
+    emoji: "🛡️",
+    desc: "Saves cash, avoids risk",
+  },
+  monopolist: {
+    label: "Monopolist",
+    emoji: "🏠",
+    desc: "Obsessed with color sets",
+  },
+  random: { label: "Random", emoji: "🎲", desc: "Unpredictable & chaotic" },
 };

@@ -22,7 +22,6 @@ import {
 
 // ─── Utility helpers ─────────────────────────────────────────────────────────
 import {
-  clamp,
   generateCode,
   safePlayers,
   safeProps,
@@ -30,11 +29,14 @@ import {
   safeDice,
   safeSettings,
   estimateAssetValueForPlayer,
-  estimatePropertyRent,
   marketGroupKey,
   randomMarketModifiers,
   freshGameState,
   eligibleTransferPropertyIds,
+  calculateMonopolyChance,
+  calculateBankruptcyRisk,
+  getColorSetInsights,
+  getDangerousZones,
 } from "./utils";
 
 // ─── AI logic ────────────────────────────────────────────────────────────────
@@ -47,13 +49,17 @@ import {
 } from "./ai";
 
 // ─── Components ──────────────────────────────────────────────────────────────
-import DieFace from "./components/DieFace";
-import BoardCell from "./components/BoardCell";
-import PropertyCardModal from "./components/PropertyCardModal";
 import BoardPopup from "./components/BoardPopup";
 import TurnTimer from "./components/TurnTimer";
 import GameTimer from "./components/GameTimer";
-import SettingsModal from "./components/SettingsModal";
+import LobbyView from "./components/LobbyView";
+import WaitingView from "./components/WaitingView";
+import GameOverView from "./components/GameOverView";
+import ChatBox from "./components/ChatBox";
+import GameHeader from "./components/GameHeader";
+import TurnBanner from "./components/TurnBanner";
+import BoardView from "./components/BoardView";
+import SidePanelView from "./components/SidePanelView";
 import { playSound } from "./soundManager";
 
 import "./game.css";
@@ -141,29 +147,6 @@ export default function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // ── URL Routing — Handle /ROOMCODE or /AI deep-linking ──
-  useEffect(() => {
-    const path = window.location.pathname.slice(1).toUpperCase();
-    if (path === "AI") {
-      startAIGame();
-    } else if (path && path.length >= 4 && path.length <= 6) {
-      joinGame(path);
-    }
-  }, []); // Run once on mount
-
-  // Sync state to URL
-  useEffect(() => {
-    const currentPath = window.location.pathname.slice(1).toUpperCase();
-    if (isLocalGame) {
-      if (currentPath !== "AI") window.history.pushState({}, "", "/AI");
-    } else {
-      if (roomCode && roomCode !== currentPath) {
-        window.history.pushState({}, "", `/${roomCode}`);
-      } else if (!roomCode && currentPath) {
-        window.history.pushState({}, "", "/");
-      }
-    }
-  }, [roomCode, isLocalGame]);
 
   useEffect(() => {
     if (windowWidth >= 600 && mobileChatOpen) setMobileChatOpen(false);
@@ -1689,13 +1672,11 @@ export default function App() {
   };
 
   // ── Create / Join ──
-  const createGame = async () => {
+  const createGame = useCallback(async () => {
     let code = "";
     let created = false;
-
     for (let attempt = 0; attempt < 8 && !created; attempt++) {
       const candidate = generateCode();
-      // Reserve room atomically; if it already exists, retry with another code.
       const result = await runTransaction(
         ref(db, `games/${candidate}`),
         (current) => {
@@ -1734,9 +1715,9 @@ export default function App() {
     setMyIdx(0);
     myIdxRef.current = 0;
     setScreen("waiting");
-  };
+  }, [playerCount]);
 
-  const joinGame = async (optionalCode) => {
+  const joinGame = useCallback(async (optionalCode) => {
     const code = (typeof optionalCode === "string" ? optionalCode : joinCode)
       .toUpperCase()
       .trim();
@@ -1792,9 +1773,9 @@ export default function App() {
     setRoomCode(code);
     setIsHost(false);
     setScreen("waiting");
-  };
+  }, [joinCode]);
 
-  const startGame = async (count) => {
+  const startGame = useCallback(async (count) => {
     const aiP = settings.aiPlayers || [];
     const aiConfigs = {};
     aiP.forEach((idx) => {
@@ -1803,10 +1784,9 @@ export default function App() {
     const gs = freshGameState(count, settings, aiP, aiConfigs);
     await set(ref(db, `games/${roomCode}/state`), gs);
     setScreen("game");
-  };
+  }, [settings, aiDifficulty, aiPersonality, roomCode]);
 
-  // Start a fully local AI game (no Firebase, no room code)
-  const startAIGame = () => {
+  const startAIGame = useCallback(() => {
     const totalPlayers = 1 + aiOpponentCount; // human is P0
     const aiPlayerIndices = Array.from(
       { length: aiOpponentCount },
@@ -1814,13 +1794,7 @@ export default function App() {
     );
     const aiConfigs = {};
     aiPlayerIndices.forEach((idx) => {
-      // Give each opponent slightly different personality for variety
-      const personalities = [
-        "aggressive",
-        "conservative",
-        "monopolist",
-        "random",
-      ];
+      const personalities = ["aggressive", "conservative", "monopolist", "random"];
       aiConfigs[idx] = {
         difficulty: aiDifficulty,
         personality: personalities[(idx - 1) % personalities.length],
@@ -1841,7 +1815,31 @@ export default function App() {
     prevPositionsRef.current = null;
     setGameState(gs);
     setScreen("game");
-  };
+  }, [aiOpponentCount, aiDifficulty]);
+
+  // ── URL Routing — Handle /ROOMCODE or /AI deep-linking ──
+  useEffect(() => {
+    const path = window.location.pathname.slice(1).toUpperCase();
+    if (path === "AI") {
+      startAIGame();
+    } else if (path && path.length >= 4 && path.length <= 6) {
+      joinGame(path);
+    }
+  }, [joinGame, startAIGame]); // Sync with functions
+
+  // Sync state to URL
+  useEffect(() => {
+    const currentPath = window.location.pathname.slice(1).toUpperCase();
+    if (isLocalGame) {
+      if (currentPath !== "AI") window.history.pushState({}, "", "/AI");
+    } else {
+      if (roomCode && roomCode !== currentPath) {
+        window.history.pushState({}, "", `/${roomCode}`);
+      } else if (!roomCode && currentPath) {
+        window.history.pushState({}, "", "/");
+      }
+    }
+  }, [roomCode, isLocalGame]);
 
   const sendChat = async () => {
     const text = chatInput.trim();
@@ -1967,224 +1965,23 @@ export default function App() {
   // LOBBY
   // ════════════════════════════════════════════════════════════
   if (screen === "lobby") {
-    const DIFF_INFO = {
-      easy: {
-        label: "Easy",
-        emoji: "🟢",
-        desc: "Buys casually, builds slowly",
-      },
-      medium: {
-        label: "Medium",
-        emoji: "🟡",
-        desc: "Balanced — competes seriously",
-      },
-      hard: { label: "Hard", emoji: "🟠", desc: "Monopoly-focused, long-term" },
-      strategic: {
-        label: "Strategic",
-        emoji: "🔴",
-        desc: "Calculates risk, targets leaders",
-      },
-    };
-    const PERS_INFO = {
-      aggressive: {
-        label: "Aggressive",
-        emoji: "⚔️",
-        desc: "Buys everything, builds fast",
-      },
-      conservative: {
-        label: "Conservative",
-        emoji: "🛡️",
-        desc: "Saves cash, avoids risk",
-      },
-      monopolist: {
-        label: "Monopolist",
-        emoji: "🏠",
-        desc: "Obsessed with color sets",
-      },
-      random: { label: "Random", emoji: "🎲", desc: "Unpredictable & chaotic" },
-    };
     return (
-      <div className="screen-overlay">
-        <div className="menu-card">
-          {/* Title */}
-          <div className="menu-card-header">
-            <div className="emoji-large">
-              🎲
-            </div>
-            <h1 className="menu-title">
-              MONOPOLY
-            </h1>
-            <p className="menu-subtitle">
-              Online Multiplayer &amp; AI Mode
-            </p>
-          </div>
-
-          {/* Mode tabs */}
-          <div className="tab-container">
-            {[
-              ["multiplayer", "🌐 Multiplayer"],
-              ["ai", "🤖 vs AI"],
-            ].map(([mode, label]) => (
-              <button
-                key={mode}
-                onClick={() => setLobbyMode(mode)}
-                className={`tab-button ${lobbyMode === mode ? "active" : ""}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="menu-card-body">
-            {/* ── MULTIPLAYER TAB ── */}
-            {lobbyMode === "multiplayer" && (
-              <>
-                <div className="content-block">
-                  <h3 className="section-title">
-                    🏠 Create a Game
-                  </h3>
-                  <p className="label-text">
-                    Number of Players
-                  </p>
-                  <div className="flex-center flex-gap-10 margin-bottom-14">
-                    {[2, 3, 4].map((n) => (
-                      <button
-                        key={n}
-                        onClick={() => setPlayerCount(n)}
-                        className={`btn-ghost ${playerCount === n ? "active" : ""}`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                  <button className="btn btn-primary" onClick={createGame}>
-                    Create Game →
-                  </button>
-                </div>
-
-                <div className="divider">
-                  <div className="divider-line" />
-                  <span className="divider-text">OR</span>
-                  <div className="divider-line" />
-                </div>
-
-                <div className="content-block-alt">
-                  <h3 className="section-title">
-                    🔗 Join a Game
-                  </h3>
-                  <input
-                    value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === "Enter" && joinGame()}
-                    placeholder="Enter room code"
-                    maxLength={6}
-                    className="input-code"
-                  />
-                  {error && (
-                    <p className="error-text">
-                      {error}
-                    </p>
-                  )}
-                  <button className="btn btn-secondary btn-full" onClick={joinGame}>
-                    Join Game →
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* ── AI MODE TAB ── */}
-            {lobbyMode === "ai" && (
-              <>
-                <div className="ai-config-box">
-                  <div className="ai-config-header">
-                    🤖 <span>AI Opponents</span>
-                    <span className="text-light text-xs font-normal">
-                      (you are always Player 1)
-                    </span>
-                  </div>
-                  <div className="ai-count-grid">
-                    {[1, 2, 3].map((n) => (
-                      <button
-                        key={n}
-                        onClick={() => setAiOpponentCount(n)}
-                        className={`btn-ai-count ${aiOpponentCount === n ? "active" : "inactive"}`}
-                      >
-                        {n} AI{n > 1 ? "s" : ""}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Difficulty */}
-                <div className="margin-bottom-16">
-                  <div className="ai-config-header margin-bottom-8">
-                    🎯 Difficulty
-                  </div>
-                  <div className="grid-2">
-                    {Object.entries(DIFF_INFO).map(
-                      ([key, { label, emoji, desc }]) => (
-                        <button
-                          key={key}
-                          onClick={() => setAiDifficulty(key)}
-                          className={`card-button ${aiDifficulty === key ? "active" : ""}`}
-                        >
-                          <div className="weight-bold margin-bottom-2">
-                            {emoji} {label}
-                          </div>
-                          <div className="text-light text-xs font-normal">
-                            {desc}
-                          </div>
-                        </button>
-                      ),
-                    )}
-                  </div>
-                </div>
-
-                {/* Personality */}
-                <div className="margin-bottom-20">
-                  <div className="section-title">
-                    🎭 AI Play Style
-                    <span className="text-light text-xs margin-left-6 font-normal">
-                      (each AI gets a different style automatically)
-                    </span>
-                  </div>
-                  <div className="grid-2">
-                    {Object.entries(PERS_INFO).map(
-                      ([key, { label, emoji, desc }]) => (
-                        <div key={key} className="card-info">
-                          <div className="weight-bold margin-bottom-2">
-                            {emoji} {label}
-                          </div>
-                          <div className="text-light">{desc}</div>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                  <p className="text-light text-xs text-center margin-top-8">
-                    With {aiOpponentCount} opponent
-                    {aiOpponentCount > 1 ? "s" : ""}, each gets a unique style
-                  </p>
-                </div>
-
-                {/* Summary */}
-                <div className="settings-summary-box">
-                  <strong className="text-success-dark">You vs {aiOpponentCount} AI</strong> —{" "}
-                  {DIFF_INFO[aiDifficulty].label} difficulty
-                  {aiOpponentCount === 1 &&
-                    ` • ${Object.values(PERS_INFO)[0].label} style`}
-                </div>
-
-                <button
-                  onClick={startAIGame}
-                  className="btn-play-ai"
-                >
-                  🎮 Play vs AI — Start Game
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      <LobbyView
+        lobbyMode={lobbyMode}
+        setLobbyMode={setLobbyMode}
+        playerCount={playerCount}
+        setPlayerCount={setPlayerCount}
+        createGame={createGame}
+        joinCode={joinCode}
+        setJoinCode={setJoinCode}
+        joinGame={joinGame}
+        error={error}
+        aiOpponentCount={aiOpponentCount}
+        setAiOpponentCount={setAiOpponentCount}
+        aiDifficulty={aiDifficulty}
+        setAiDifficulty={setAiDifficulty}
+        startAIGame={startAIGame}
+      />
     );
   }
 
@@ -2192,144 +1989,26 @@ export default function App() {
   // WAITING
   // ════════════════════════════════════════════════════════════
   if (screen === "waiting") {
-    const maxPlayers = gameState?.hostPlayerCount || playerCount;
-    const totalJoined = lobbyPlayers.length + (settings.aiPlayers || []).length;
-    const canStart = totalJoined >= maxPlayers;
     return (
-      <div className="screen-overlay">
-        <div className="menu-card text-center">
-          <div className="emoji-large">⏳</div>
-          <h2 className="section-title text-center">
-            Waiting for Players
-          </h2>
-          <p className="menu-subtitle margin-bottom-20">
-            {lobbyPlayers.length}/{maxPlayers} joined
-          </p>
-
-          <div className="room-code-box">
-            <p className="room-code-title">ROOM CODE</p>
-            <div className="room-code-text" style={{ display: "flex", alignItems: "center", gap: "10px", justifyContent: "center" }}>
-              {roomCode}
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(roomCode);
-                  setCodeCopied(true);
-                  setTimeout(() => setCodeCopied(false), 2000);
-                }}
-                title="Copy room code"
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "1rem",
-                  opacity: 0.8,
-                  padding: "2px 4px",
-                  borderRadius: "4px",
-                  transition: "opacity 0.2s",
-                }}
-              >
-                {codeCopied ? "✅" : "📋"}
-              </button>
-            </div>
-            <p className="room-code-title margin-top-8">
-              {codeCopied ? "Copied to clipboard!" : "Share with friends"}
-            </p>
-          </div>
-
-          {Array.from({ length: maxPlayers }, (_, i) => {
-            const p = lobbyPlayers[i];
-            const isAI = (settings.aiPlayers || []).includes(i);
-            return (
-              <div
-                key={i}
-                className={`player-waiting-row ${p ? "joined" : ""}`}
-              >
-                <span className="text-xl">
-                  {isAI ? "🤖" : p ? PLAYER_TOKENS[i] : "⬜"}
-                </span>
-                <span
-                  className={`weight-bold text-md player-${i}-text`}
-                >
-                  {isAI
-                    ? `P${i + 1} AI`
-                    : p
-                      ? `Player ${i + 1}${i === myIdx ? " (You)" : ""}`
-                      : i === 0
-                        ? "Connecting..."
-                        : "Waiting..."}
-                </span>
-                {p && (
-                  <span className="margin-left-auto text-sm text-success">
-                    ✓
-                  </span>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Settings summary */}
-          <div className="settings-summary-box">
-            <strong className="text-success-dark">Settings: </strong>
-            {settings.turnTimer
-              ? `${settings.turnTimer}s timer`
-              : "No timer"} •{" "}
-            {settings.gameMode === "classic"
-              ? "Classic"
-              : settings.gameMode === "timed"
-                ? `Timed ${settings.timedMinutes}min`
-                : `Target $${(settings.targetAmount || 10000).toLocaleString()}`}
-            {(settings.aiPlayers || []).length > 0 &&
-              ` • ${settings.aiPlayers.length} AI`}
-          </div>
-
-          <div className="flex-column gap-6 margin-top-12">
-            {isHost && (
-              <button className="btn btn-secondary btn-full" onClick={() => setShowSettings(true)}>
-                ⚙️ Change Game Settings
-              </button>
-            )}
-            {isHost && (
-              <button
-                className="btn btn-primary btn-full"
-                onClick={() => startGame(maxPlayers)}
-                disabled={!canStart}
-              >
-                ▶ Start Game ({totalJoined} / {maxPlayers})
-              </button>
-            )}
-            {isHost && !canStart && (
-              <p className="menu-subtitle margin-top-4 text-xs">
-                Waiting for {maxPlayers - totalJoined} more player{maxPlayers - totalJoined === 1 ? "" : "s"}...
-              </p>
-            )}
-            {!isHost && (
-              <p className="menu-subtitle">
-                Waiting for host to start...
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Settings popup */}
-        {showSettings && isHost && (
-          <SettingsModal
-            settings={settings}
-            onChange={async (newS) => {
-              setSettings(newS);
-              if (roomCode) {
-                await update(ref(db, `games/${roomCode}/state`), {
-                  settings: newS,
-                  hostPlayerCount: playerCount, // keep synced
-                });
-              }
-            }}
-            onClose={() => setShowSettings(false)}
-            playerCount={playerCount}
-            setPlayerCount={setPlayerCount}
-            maxPlayers={4}
-          />
-        )}
-      </div>
+      <WaitingView
+        gameState={gameState}
+        playerCount={playerCount}
+        lobbyPlayers={lobbyPlayers}
+        settings={settings}
+        roomCode={roomCode}
+        codeCopied={codeCopied}
+        setCodeCopied={setCodeCopied}
+        myIdx={myIdx}
+        isHost={isHost}
+        setShowSettings={setShowSettings}
+        showSettings={showSettings}
+        setSettings={setSettings}
+        setPlayerCount={setPlayerCount}
+        startGame={startGame}
+        db={db}
+        update={update}
+        ref={ref}
+      />
     );
   }
 
@@ -2337,59 +2016,7 @@ export default function App() {
   // GAME OVER
   // ════════════════════════════════════════════════════════════
   if (gameState?.status === "gameover") {
-    const ps = safePlayers(gameState);
-    const alive = ps.filter((p) => !p.bankrupt);
-    const winner =
-      alive.length > 0
-        ? alive.reduce((a, b) => (a.money > b.money ? a : b))
-        : ps[0];
-    return (
-      <div className="screen-overlay">
-        <div className="menu-card text-center winner-card">
-          <div className="winner-badge">🏆</div>
-          <h2 className="section-title text-center text-2xl">GAME OVER!</h2>
-          {winner && (
-            <>
-              <p className="winner-text">
-                {winner.token} Player {winner.id + 1}
-                {winner.isAI ? " 🤖" : ""} wins!
-              </p>
-              <p className="weight-bold">
-                💰 ${winner.money.toLocaleString()}
-              </p>
-            </>
-          )}
-          <div className="flex-column gap-6 margin-top-16">
-            {ps
-              .sort((a, b) => b.money - a.money)
-              .map((p) => (
-                <div
-                  key={p.id}
-                  className={`player-rank-row ${p.id === winner?.id ? "winner-row" : ""}`}
-                >
-                  {p.id === winner?.id && <span>🏆</span>}
-                  <span className="text-xl">{p.token}</span>
-                  <span
-                    className={`weight-bold player-${p.id}-text`}
-                  >
-                    P{p.id + 1}
-                    {p.isAI ? " 🤖" : ""}
-                  </span>
-                  <span className="margin-left-auto weight-bold">
-                    ${p.money.toLocaleString()}
-                  </span>
-                  {p.bankrupt && (
-                    <span className="text-xs">💸</span>
-                  )}
-                </div>
-              ))}
-          </div>
-          <button className="btn btn-primary margin-top-20" onClick={resetToLobby}>
-            Back to Lobby
-          </button>
-        </div>
-      </div>
-    );
+    return <GameOverView gameState={gameState} resetToLobby={resetToLobby} />;
   }
 
   // ════════════════════════════════════════════════════════════
@@ -2454,24 +2081,12 @@ export default function App() {
   const chartMin = Math.min(...seriesValues, 0);
   const chartMax = Math.max(...seriesValues, 1);
 
-  const calculateMonopolyChance = (player, pid, color, ids) => {
-    const owned = ids.filter((id) => props[id]?.owner === pid).length;
-    const blocked = ids.filter((id) => props[id] && props[id].owner !== pid).length;
-    const playersAlive = rawPlayers.filter((p) => p && !p.bankrupt).length || 1;
-    const ownRatio = owned / ids.length;
-    const moneyFactor = clamp((player.money || 0) / 2200, 0, 1);
-    let chance = ownRatio * 70 + moneyFactor * 15 + ((4 - playersAlive) / 3) * 6 - blocked * 12;
-    if (owned === ids.length - 1) chance += 14;
-    if (owned === 0) chance *= 0.45;
-    return Math.round(clamp(chance, 2, 95));
-  };
-
   const playerProbabilities = rawPlayers.map((pl, pid) => {
     if (!pl || pl.bankrupt) return { pid, chance: 0, progress: "Out" };
     let bestChance = 0;
     let bestProgress = "0/0";
     Object.entries(COLOR_GROUPS).forEach(([color, ids]) => {
-      const chance = calculateMonopolyChance(pl, pid, color, ids);
+      const chance = calculateMonopolyChance(pl, pid, color, ids, props, rawPlayers);
       const owned = ids.filter((id) => props[id]?.owner === pid).length;
       if (chance > bestChance) {
         bestChance = chance;
@@ -2488,32 +2103,16 @@ export default function App() {
       return {
         color,
         label: COLOR_LABELS[color] || "Set",
-        chance: calculateMonopolyChance(me, myIdx, color, ids),
+        chance: calculateMonopolyChance(me, myIdx, color, ids, props, rawPlayers),
       };
     })
     .filter(Boolean)
     .sort((a, b) => b.chance - a.chance)
     .slice(0, 3);
 
-  const calculateBankruptcyRisk = (player, pid) => {
-    const cash = Math.max(player.money || 1, 1);
-    const lookAhead = Array.from({ length: 8 }, (_, i) => (player.position + i + 1) % 40);
-    const expectedRentExposure = lookAhead.reduce((sum, id) => {
-      const prop = props[id];
-      if (!prop || prop.owner === pid) return sum;
-      return sum + estimatePropertyRent(id, prop, props);
-    }, 0) / 8;
-    const oppStrength = Object.entries(props).reduce((sum, [id, prop]) => {
-      if (!prop || prop.owner === pid) return sum;
-      const upgrades = (prop.houses || 0) + (prop.hotel ? 5 : 0);
-      return sum + estimatePropertyRent(+id, prop, props) * (1 + upgrades * 0.12);
-    }, 0) / 40;
-    return Math.round(clamp((expectedRentExposure + oppStrength) / cash * 100, 5, 98));
-  };
-
   const riskByPlayer = rawPlayers.map((pl, pid) => {
     if (!pl || pl.bankrupt) return { pid, risk: 100, label: "Critical" };
-    const rounded = calculateBankruptcyRisk(pl, pid);
+    const rounded = calculateBankruptcyRisk(pl, pid, props);
     const label =
       rounded < 30
         ? "Low"
@@ -2525,157 +2124,32 @@ export default function App() {
     return { pid, risk: rounded, label };
   });
 
-  const colorSetInsights = Object.entries(COLOR_GROUPS)
-    .map(([color, ids]) => {
-      const owner = props[ids[0]]?.owner;
-      const monopoly =
-        owner !== undefined && ids.every((id) => props[id]?.owner === owner);
-      if (!monopoly) return null;
-      const rents = ids.map((id) => estimatePropertyRent(id, props[id], props));
-      const incomePotential = rents.reduce((a, b) => a + b, 0);
-      const upgrades = ids.reduce(
-        (n, id) => n + (props[id]?.houses || 0) + (props[id]?.hotel ? 5 : 0),
-        0,
-      );
-      return {
-        color,
-        owner,
-        ids,
-        incomePotential,
-        upgrades,
-        topRent: Math.max(...rents, 0),
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.incomePotential - a.incomePotential);
-
-  const dangerousZones = Object.entries(props)
-    .map(([id, prop]) => ({
-      id: +id,
-      owner: prop?.owner,
-      rent: estimatePropertyRent(+id, prop, props),
-    }))
-    .filter((z) => z.rent > 0)
-    .sort((a, b) => b.rent - a.rent)
-    .slice(0, 3);
+  const colorSetInsights = getColorSetInsights(props);
+  const dangerousZones = getDangerousZones(props);
 
   return (
     <div className="game-root">
       {/* ── Header ── */}
-      <div className="game-header">
-        <div className="flex-gap-8 align-center flex-wrap">
-          <span className="game-title-badge">
-            🎲 MONOPOLY
-          </span>
-          <span className="room-badge" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-            {roomCode}
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(roomCode);
-                setCodeCopied(true);
-                setTimeout(() => setCodeCopied(false), 2000);
-              }}
-              title="Copy room code"
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: "0.75rem",
-                padding: "0 2px",
-                opacity: 0.75,
-                lineHeight: 1,
-              }}
-            >
-              {codeCopied ? "✅" : "📋"}
-            </button>
-          </span>
-          <span className="mode-badge">
-            {gs_s.gameMode === "classic"
-              ? "⚔️ Classic"
-              : gs_s.gameMode === "timed"
-                ? `⏱ ${gs_s.timedMinutes}min`
-                : `🎯 $${(gs_s.targetAmount || 10000).toLocaleString()}`}
-          </span>
-          <button
-            onClick={() =>
-              setLayoutFocus((prev) => (prev === "board" ? "panel" : "board"))
-            }
-            className="pill text-xs"
-            title="Toggle board and side-panel emphasis"
-          >
-            {layoutFocus === "board" ? "🧩 Board Focus" : "📋 Panel Focus"}
-          </button>
-        </div>
-        {/* Player chips */}
-        <div className="flex-gap-8 align-center flex-wrap">
-          {rawPlayers.map((p, i) =>
-            p ? (
-              <div
-                key={i}
-                className={`player-chip ${gameState.currentPlayer === i ? "active-turn" : i === myIdx ? "current-player" : ""} ${p.bankrupt ? "bankrupt" : ""}`}
-              >
-                <span className="text-md">{p.token}</span>
-                <div className="flex-column">
-                  <div
-                    className={`text-xs weight-bold player-${i}-text`}
-                  >
-                    P{i + 1}
-                    {p.isAI ? " 🤖" : ""}
-                    {i === myIdx ? " ★" : ""}
-                  </div>
-                  <div className="text-xs weight-bold text-black">
-                    ${p.money.toLocaleString()}
-                  </div>
-                </div>
-                {p.inJail && <span className="jail-icon">🔒</span>}
-                {(p.frozenTurns || 0) > 0 && (
-                  <span className="frozen-badge">❄️{p.frozenTurns}</span>
-                )}
-                {(p.rentImmuneTurns || 0) > 0 && (
-                  <span className="immune-badge">🛡️</span>
-                )}
-                {(p.jailFreeCards || 0) > 0 && (
-                  <span className="card-icon">🃏×{p.jailFreeCards}</span>
-                )}
-                {p.bankrupt && <span className="bankrupt-icon">💸</span>}
-              </div>
-            ) : null,
-          )}
-          {gs_s.gameMode === "timed" && gameState.gameStartTime && (
-            <GameTimer
-              gameStartTime={gameState.gameStartTime}
-              limitMinutes={gs_s.timedMinutes || 60}
-              onExpire={() => {
-                if (myIdx === 0) {
-                  const log = safeLog(gsRef.current);
-                  log.unshift("⏰ Time's up!");
-                  pushState({
-                    ...gsRef.current,
-                    status: "gameover",
-                    log: log.slice(0, 25),
-                  });
-                }
-              }}
-            />
-          )}
-        </div>
-        <button className="btn btn-danger text-xs" onClick={resetToLobby}>
-          Leave
-        </button>
-      </div>
+      <GameHeader
+        roomCode={roomCode}
+        codeCopied={codeCopied}
+        setCodeCopied={setCodeCopied}
+        gs_s={gs_s}
+        gameState={gameState}
+        rawPlayers={rawPlayers}
+        myIdx={myIdx}
+        resetToLobby={resetToLobby}
+        layoutFocus={layoutFocus}
+        setLayoutFocus={setLayoutFocus}
+      />
 
       {/* ── Turn banner ── */}
-      <div
-        className={`banner-message ${isMyTurn ? (gameState.rolled ? "text-warning" : "text-success-light") : "text-danger-light"}`}
-      >
-        {isRolling
-          ? `🎲 ${cur?.token || ""} P${(gameState.currentPlayer || 0) + 1}${cur?.isAI ? " 🤖" : ""} is rolling...`
-          : isMyTurn
-            ? gameState.rolled
-              ? "✅ Done! — End your turn →"
-              : "🎲 YOUR TURN — Roll the dice!"
-            : `⏳ ${cur?.token || ""} P${(gameState.currentPlayer || 0) + 1}${cur?.isAI ? " 🤖" : ""}'s turn...`}
-      </div>
+      <TurnBanner
+        isRolling={isRolling}
+        cur={cur}
+        gameState={gameState}
+        isMyTurn={isMyTurn}
+      />
 
       {/* ── Sell-to-pay banner ── */}
       {sellToPay && sellToPay.playerId === myIdx && (
@@ -2712,585 +2186,77 @@ export default function App() {
       {/* ── Main Layout ── */}
       <div className="game-layout">
         {/* Board */}
-        <div className="board-wrap">
-          <div
-            className="board-grid"
-            style={{
-              "--gtc": cols.map((w) => `${w}px`).join(" "),
-              "--gtr": rows.map((h) => `${h}px`).join(" "),
-            }}
-          >
-            {CELL_POSITIONS.map(({ id, gridRow, gridColumn }) => (
-              <div
-                key={id}
-                className="flex cell-container"
-                style={{ "--row": gridRow, "--col": gridColumn }}
-              >
-                <BoardCell
-                  spaceId={id}
-                  players={displayPlayers}
-                  properties={props}
-                  isSelected={selectedSpace === id}
-                  width={cols[gridColumn - 1]}
-                  height={rows[gridRow - 1]}
-                  onClick={() => {
-                    // Toggle selection — any space is clickable for info
-                    setSelectedSpace((prev) => (prev === id ? null : id));
-                  }}
-                  flashCell={flashCell}
-                  bouncingPlayer={bouncingPlayer}
-                />
-              </div>
-            ))}
-            {/* Center */}
-            <div className="board-center">
-              <div className="board-center-decals">
-                <div className="decal community-decal">
-                  <span className="decal-icon">🎁</span>
-                  <span className="decal-label">COMMUNITY CHEST</span>
-                </div>
-                <div className="decal chance-decal">
-                  <span className="decal-icon">?</span>
-                  <span className="decal-label">CHANCE</span>
-                </div>
-              </div>
-              <div className="board-title">MONOPOLY</div>
-              <div className="free-parking-label">
-                🅿️ ${gameState.freePot || 0}
-              </div>
-              <div className="flex-gap-12">
-                {diceArr.map((d, i) => (
-                  <DieFace
-                    key={i}
-                    value={d}
-                    shaking={isRolling}
-                    landing={diceLanding && !isRolling}
-                  />
-                ))}
-              </div>
-              {gs_s.turnTimer > 0 && isMyTurn && (
-                <div className="timer-container">
-                  <TurnTimer
-                    turnStartTime={gameState.turnStartTime || Date.now()}
-                    limit={gs_s.turnTimer}
-                    onExpire={handleTimerExpire}
-                    isMyTurn={isMyTurn}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Board-level popup */}
-          <BoardPopup
-            modal={modal}
-            players={rawPlayers}
-            myIdx={myIdx}
-            isMyTurn={isMyTurn}
-            onBuy={buyProperty}
-            onPass={() => pushState({ ...gameState, modal: null })}
-            onDismiss={dismissModal}
-            onUseJailCard={handleUseJailCard}
-            onPayJailFine={handlePayJailFine}
-            onJailRoll={handleJailRoll}
-            onSteal={handleSteal}
-            onSwap={handleSwap}
-            onBuildHouse={buildHouse}
-            onRouletteSpin={handleRouletteSpin}
-            eligibleStealTargets={eligibleStealTargets}
-            eligibleSwapMine={eligibleSwapMine}
-            props={props}
-            rawPlayers={rawPlayers}
-          />
-        </div>
+        <BoardView
+          cols={cols}
+          rows={rows}
+          displayPlayers={displayPlayers}
+          props={props}
+          selectedSpace={selectedSpace}
+          setSelectedSpace={setSelectedSpace}
+          flashCell={flashCell}
+          bouncingPlayer={bouncingPlayer}
+          gameState={gameState}
+          diceArr={diceArr}
+          isRolling={isRolling}
+          diceLanding={diceLanding}
+          gs_s={gs_s}
+          isMyTurn={isMyTurn}
+          handleTimerExpire={handleTimerExpire}
+          modal={modal}
+          rawPlayers={rawPlayers}
+          myIdx={myIdx}
+          buyProperty={buyProperty}
+          pushState={pushState}
+          dismissModal={dismissModal}
+          handleUseJailCard={handleUseJailCard}
+          handlePayJailFine={handlePayJailFine}
+          handleJailRoll={handleJailRoll}
+          handleSteal={handleSteal}
+          handleSwap={handleSwap}
+          buildHouse={buildHouse}
+          handleRouletteSpin={handleRouletteSpin}
+          eligibleStealTargets={eligibleStealTargets}
+          eligibleSwapMine={eligibleSwapMine}
+        />
 
         {/* Right panel */}
-        <div className="right-panel">
-
-          <div className="strategy-panel">
-            {/* Controls */}
-            {me && !me.bankrupt && (
-              <div className="strategy-card-me">
-                <div className="strategy-me-header">
-                  <span className="text-xl">{me.token}</span>
-                  <div className="flex-1">
-                    <div className="flex-column">
-                      <div className={`text-md weight-bold player-${myIdx}-text`}>
-                        You (P{myIdx + 1})
-                      </div>
-                      <div className="text-sm weight-bold text-black">
-                        ${me.money.toLocaleString()}
-                      </div>
-                      {(me.jailFreeCards || 0) > 0 && (
-                        <div className="text-xs text-purple">
-                          🃏 Jail Free ×{me.jailFreeCards}
-                        </div>
-                      )}
-                      {(me.doubleRentTurns || 0) > 0 && (
-                        <div className="text-xs text-orange">
-                          💰 Double rent ×{me.doubleRentTurns}
-                        </div>
-                      )}
-                      {(me.rentImmuneTurns || 0) > 0 && (
-                        <div className="text-xs text-success-dark">
-                          🛡️ Rent immune
-                        </div>
-                      )}
-                      {(me.frozenTurns || 0) > 0 && (
-                        <div className="text-xs text-blue">
-                          ❄️ Frozen {me.frozenTurns} turn(s)
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {me.inJail && (
-                    <span className="jail-badge">
-                      🔒 JAIL
-                    </span>
-                  )}
-                </div>
-                <div className="flex-gap-6 flex-wrap">
-                  <button
-                    onClick={handleRoll}
-                    disabled={
-                      !isMyTurn || gameState.rolled || processing || !!sellToPay
-                    }
-                    className={`btn-roll ${(!isMyTurn || gameState.rolled || processing || sellToPay) ? "btn-dim" : "btn-success"}`}
-                  >
-                    🎲 Roll
-                  </button>
-                  <button
-                    onClick={endTurn}
-                    disabled={
-                      !isMyTurn ||
-                      !gameState.rolled ||
-                      processing ||
-                      !!sellToPay
-                    }
-                    className={`btn-end ${
-                      (!isMyTurn || !gameState.rolled || processing || sellToPay) 
-                        ? ""
-                        : "btn-end-active"
-                    }`}
-                  >
-                    End →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Real-time Analytics Dashboard */}
-            <div className="analytics-panel">
-              <div className="analytics-title">
-                📊 STRATEGY DASHBOARD (LIVE)
-              </div>
-
-              <div className="analytics-card">
-                <div className="row-between margin-bottom-6">
-                  <div className="card-title-tiny">
-                    Wealth Growth
-                  </div>
-                  <div className="flex-gap-4">
-                    <button
-                      className={`pill text-xs ${wealthMode === "net" ? "active" : ""}`}
-                      onClick={() => setWealthMode("net")}
-                    >
-                      Net Worth
-                    </button>
-                    <button
-                      className={`pill text-xs ${wealthMode === "assets" ? "active" : ""}`}
-                      onClick={() => setWealthMode("assets")}
-                    >
-                      Assets
-                    </button>
-                  </div>
-                </div>
-                <svg
-                  width="100%"
-                  viewBox="0 0 300 110"
-                  className="chart-svg"
-                >
-                  {rawPlayers.map((p, pid) => {
-                    if (!p) return null;
-                    const pts = wealthSeries
-                      .map((pt, idx) => {
-                        const v = pt.values.find((x) => x.id === pid);
-                        const value =
-                          wealthMode === "net" ? v?.net || 0 : v?.assets || 0;
-                        const x =
-                          wealthSeries.length === 1
-                            ? 10
-                            : 10 + idx * (280 / (wealthSeries.length - 1));
-                        const y =
-                          100 -
-                          ((value - chartMin) / (chartMax - chartMin || 1)) *
-                          85;
-                        return `${x},${y}`;
-                      })
-                      .join(" ");
-                    return (
-                      <polyline
-                        key={pid}
-                        points={pts}
-                        fill="none"
-                        stroke={PLAYER_COLORS[pid]}
-                        strokeWidth="2.4"
-                      />
-                    );
-                  })}
-                  {wealthSeries.map((pt, idx) => {
-                    if (!pt.event) return null;
-                    const x =
-                      wealthSeries.length === 1
-                        ? 10
-                        : 10 + idx * (280 / (wealthSeries.length - 1));
-                    return (
-                      <circle
-                        key={`ev-${idx}`}
-                        cx={x}
-                        cy="12"
-                        r="3"
-                        fill="#f59e0b"
-                      />
-                    );
-                  })}
-                </svg>
-                <div className="chart-desc">
-                  Orange dots mark big moments like monopoly swings,
-                  bankruptcies, or heavy rent hits.
-                </div>
-              </div>
-
-              <div className="analytics-card">
-                <div className="card-title-tiny margin-bottom-6">
-                  Monopoly Completion Chance
-                </div>
-                {myGroupChances.length > 0 && (
-                  <div className="text-xs text-dim margin-bottom-8">
-                    {myGroupChances.map((g) => `${g.label}: ${g.chance}%`).join(" • ")}
-                  </div>
-                )}
-                {playerProbabilities.map((p) => (
-                  <div key={`prob-${p.pid}`} className="margin-bottom-6">
-                    <div className="row-between text-xs">
-                      <span className={`weight-bold player-${p.pid}-text`}>
-                        P{p.pid + 1}
-                      </span>
-                      <span>
-                        {p.chance}% • {p.progress}
-                      </span>
-                    </div>
-                    <div className="meter-track">
-                      <div
-                        className={`player-${p.pid}-bg h-full`}
-                        style={{ "--w": `${p.chance}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="analytics-card">
-                <div className="risk-title">
-                  Bankruptcy Risk
-                </div>
-                {riskByPlayer.map((r) => {
-                  const riskClass =
-                    r.risk < 30
-                      ? "low"
-                      : r.risk < 55
-                        ? "med"
-                        : r.risk < 75
-                          ? "high"
-                          : "crit";
-                  return (
-                    <div key={`risk-${r.pid}`} className="risk-row">
-                      <span className={`risk-player player-${r.pid}-text`}>
-                        P{r.pid + 1}
-                      </span>
-                      <div className="flex-1 meter-track">
-                        <div
-                          className={`risk-${riskClass}-bg h-full`}
-                          style={{ "--w": `${r.risk}%` }}
-                        />
-                      </div>
-                      <span className={`risk-value risk-${riskClass}-text`}>
-                        {r.risk}% ({r.label})
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="analytics-card margin-0">
-                <div className="risk-title">
-                  Strongest Sets & Danger Zones
-                </div>
-                {colorSetInsights.length === 0 ? (
-                  <div className="text-xs text-dim">
-                    No complete monopoly set yet — trading and blocking are wide
-                    open.
-                  </div>
-                ) : (
-                  <div className="insight-list">
-                    {colorSetInsights.slice(0, 2).map((set, idx) => (
-                      <div key={`set-${idx}`} className="insight-item">
-                        <strong className={`weight-bold player-${set.owner}-text`}>
-                          P{set.owner + 1}
-                        </strong>{" "}
-                        controls{" "}
-                        <strong className="weight-bold">{COLOR_LABELS[set.color] || "Color"}</strong> •
-                        Potential ${set.incomePotential}/round • Upgrades{" "}
-                        {set.upgrades}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="text-xs text-dim margin-top-6">
-                  Danger zones:{" "}
-                  {dangerousZones.length
-                    ? dangerousZones
-                      .map((z) => `${SPACES[z.id]?.name} ($${z.rent})`)
-                      .join(" • ")
-                    : "none yet"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="details-panel">
-            {/* My Properties panel */}
-            {myProps.length > 0 && (
-              <div className="property-list-card">
-                <div className="property-list-title">
-                  🏠 Your Properties
-                </div>
-                <div className="property-list-scroll">
-                  {myProps.map(([id, prop]) => {
-                    const space = SPACES[+id];
-                    if (!space) return null;
-                    const group = COLOR_GROUPS[space.color] || [];
-                    const hasMonopoly =
-                      space.type === "property" &&
-                      group.every((sid) => props[sid]?.owner === myIdx);
-                    // Only allow building from side panel if on that exact property
-                    const playerOnThisProp = me && me.position === +id;
-                    return (
-                      <div
-                        key={id}
-                        className={`property-item-row ${hasMonopoly ? "has-monopoly" : "no-monopoly"}`}
-                        style={{ "--space-color": space.color }}
-                      >
-                        {space.color && (
-                          <div
-                            className="color-dot"
-                          />
-                        )}
-                        <span className="flex-1 ellipsis">
-                          {space.name}
-                        </span>
-                        {hasMonopoly && (
-                          <span className="mono-badge weight-bold">
-                            MONO
-                          </span>
-                        )}
-                        <span>
-                          {prop.hotel
-                            ? "🏨"
-                            : prop.houses > 0
-                              ? "🏠".repeat(prop.houses)
-                              : ""}
-                        </span>
-                        {hasMonopoly &&
-                          !prop.hotel &&
-                          isMyTurn &&
-                          playerOnThisProp && (
-                            <button
-                              onClick={() => buildHouse(+id)}
-                              className="btn-build-plus"
-                            >
-                              +🏠
-                            </button>
-                          )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {isLocalGame && (
-              <div className="analytics-card">
-                <div className="card-title-tiny margin-bottom-6">🤝 Trade Proposal (AI)</div>
-                <div className="text-xs text-dim margin-bottom-6">
-                  Offer one of your properties. Request AI property and/or cash.
-                </div>
-                <div className="flex column-gap-6 row-gap-6 flex-wrap">
-                  <select
-                    value={tradeDraft.offerPropertyId}
-                    onChange={(e) => setTradeDraft((p) => ({ ...p, offerPropertyId: e.target.value }))}
-                    className="chat-input-field"
-                  >
-                    <option value="">You Offer: property</option>
-                    {myProps.map(([id]) => (
-                      <option key={`o-${id}`} value={id}>{SPACES[+id]?.name}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={tradeDraft.requestPropertyId}
-                    onChange={(e) => setTradeDraft((p) => ({ ...p, requestPropertyId: e.target.value }))}
-                    className="chat-input-field"
-                  >
-                    <option value="">You Request: property (optional)</option>
-                    {Object.entries(props)
-                      .filter(([, p]) => p && p.owner !== myIdx)
-                      .map(([id]) => (
-                        <option key={`r-${id}`} value={id}>{SPACES[+id]?.name}</option>
-                      ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={0}
-                    value={tradeDraft.requestCash}
-                    onChange={(e) => setTradeDraft((p) => ({ ...p, requestCash: Number(e.target.value || 0) }))}
-                    placeholder="Cash request"
-                    className="chat-input-field"
-                  />
-                  <button
-                    onClick={submitTradeOffer}
-                    disabled={!tradeDraft.offerPropertyId}
-                    className={`btn-chat-go ${tradeDraft.offerPropertyId ? "btn-success" : "btn-dim"}`}
-                  >
-                    Send Offer
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="analytics-card">
-              <div className="card-title-tiny margin-bottom-6">🔊 Audio Settings</div>
-              <label className="text-xs text-dim">Master Volume: {Math.round(audioSettings.masterVolume * 100)}%</label>
-              <input type="range" min="0" max="1" step="0.05" value={audioSettings.masterVolume} onChange={(e) => setAudioSettings((s) => ({ ...s, masterVolume: +e.target.value }))} />
-              <label className="text-xs text-dim">Music Volume: {Math.round(audioSettings.musicVolume * 100)}%</label>
-              <input type="range" min="0" max="1" step="0.05" value={audioSettings.musicVolume} onChange={(e) => setAudioSettings((s) => ({ ...s, musicVolume: +e.target.value }))} />
-              <label className="text-xs text-dim">Effects Volume: {Math.round(audioSettings.effectsVolume * 100)}%</label>
-              <input type="range" min="0" max="1" step="0.05" value={audioSettings.effectsVolume} onChange={(e) => setAudioSettings((s) => ({ ...s, effectsVolume: +e.target.value }))} />
-              <label className="text-xs text-dim flex-gap-8 align-center margin-top-6">
-                <input type="checkbox" checked={audioSettings.muted} onChange={(e) => setAudioSettings((s) => ({ ...s, muted: e.target.checked }))} />
-                Mute all
-              </label>
-            </div>
-
-            {/* All Properties */}
-            <div className="all-props-box">
-              <div className="property-list-title">
-                🗺️ All Properties
-              </div>
-              {Object.keys(props).length === 0 ? (
-                <div className="chart-desc text-center">
-                  None sold yet
-                </div>
-              ) : (
-                Object.entries(props).map(([id, prop]) => {
-                  if (!prop) return null;
-                  const space = SPACES[+id];
-                  if (!space) return null;
-                  const ownerColor = PLAYER_COLORS[prop.owner] || "#888";
-                  return (
-                    <div
-                      key={id}
-                      className="property-item-row owner-styled-row"
-                      style={{
-                        "--owner-bg": `${ownerColor}18`,
-                        "--owner-border": `${ownerColor}44`,
-                      }}
-                    >
-                      {space.color && (
-                        <div
-                          className="cell-owner-dot static-dot"
-                        />
-                      )}
-                      <span className="flex-1 ellipsis">
-                        {space.name}
-                      </span>
-                      <span>{rawPlayers[prop.owner]?.token || "?"}</span>
-                      {prop.hotel && <span>🏨</span>}
-                      {!prop.hotel && (prop.houses || 0) > 0 && (
-                        <span>{"🏠".repeat(prop.houses)}</span>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Log */}
-            <div className="game-log-box">
-              {logArr.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`game-log-msg ${i === 0 ? "text-success-light" : "text-dim"}`}
-                >
-                  {msg}
-                </div>
-              ))}
-            </div>
-
-            {/* Chat */}
-            {!isPhone && (
-              <div className="chat-box">
-                <div className="chat-header">
-                  {isLocalGame ? "🤖 AI CHAT" : "💬 CHAT"}
-                </div>
-                <div className="chat-messages-scroll">
-                  {displayedChat.length === 0 && (
-                    <div className="chart-desc text-center margin-top-12">
-                      Say hi! 👋
-                    </div>
-                  )}
-                  {displayedChat.map((msg, i) => {
-                    const isMe = msg.id === myIdx;
-                    return (
-                      <div
-                        key={i}
-                        className={`flex gap-3 align-end ${isMe ? "flex-reverse" : "flex-row"}`}
-                      >
-                        <span className="text-sm flex-shrink-0">
-                          {msg.token}
-                        </span>
-                        <div
-                          className={`chat-bubble ${isMe ? "chat-me" : "chat-them"}`}
-                        >
-                          {msg.text}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div ref={chatEndRef} />
-                </div>
-                <div className="chat-input-area">
-                  <input
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") sendChat();
-                    }}
-                    placeholder={isLocalGame ? "Ask AI for strategy..." : "Type..."}
-                    maxLength={120}
-                    className="chat-input-field"
-                  />
-                  <button
-                    onClick={sendChat}
-                    disabled={!chatInput.trim()}
-                    className={`btn-chat-go ${chatInput.trim() ? "btn-success" : "btn-dim"}`}
-                  >
-                    ➤
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <SidePanelView
+          me={me}
+          myIdx={myIdx}
+          isMyTurn={isMyTurn}
+          gameState={gameState}
+          processing={processing}
+          sellToPay={sellToPay}
+          handleRoll={handleRoll}
+          endTurn={endTurn}
+          rawPlayers={rawPlayers}
+          wealthSeries={wealthSeries}
+          wealthMode={wealthMode}
+          setWealthMode={setWealthMode}
+          chartMin={chartMin}
+          chartMax={chartMax}
+          myGroupChances={myGroupChances}
+          playerProbabilities={playerProbabilities}
+          riskByPlayer={riskByPlayer}
+          colorSetInsights={colorSetInsights}
+          dangerousZones={dangerousZones}
+          myProps={myProps}
+          props={props}
+          buildHouse={buildHouse}
+          isLocalGame={isLocalGame}
+          tradeDraft={tradeDraft}
+          setTradeDraft={setTradeDraft}
+          submitTradeOffer={submitTradeOffer}
+          audioSettings={audioSettings}
+          setAudioSettings={setAudioSettings}
+          logArr={logArr}
+          displayedChat={displayedChat}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          sendChat={sendChat}
+          chatEndRef={chatEndRef}
+          isPhone={isPhone}
+        />
 
         {isPhone && (
           <>
@@ -3302,56 +2268,16 @@ export default function App() {
             </button>
 
             {mobileChatOpen && (
-              <div className="chat-mobile-sheet">
-                <div className="chat-header">
-                  {isLocalGame ? "🤖 AI CHAT" : "💬 CHAT"}
-                </div>
-                <div className="chat-messages-scroll">
-                  {displayedChat.length === 0 && (
-                    <div className="chart-desc text-center margin-top-12">
-                      Say hi! 👋
-                    </div>
-                  )}
-                  {displayedChat.map((msg, i) => {
-                    const isMe = msg.id === myIdx;
-                    return (
-                      <div
-                        key={i}
-                        className={`flex gap-3 align-end ${isMe ? "flex-reverse" : "flex-row"}`}
-                      >
-                        <span className="text-sm flex-shrink-0">
-                          {msg.token}
-                        </span>
-                        <div
-                          className={`chat-bubble ${isMe ? "chat-me" : "chat-them"}`}
-                        >
-                          {msg.text}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div ref={chatEndRef} />
-                </div>
-                <div className="chat-input-area">
-                  <input
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") sendChat();
-                    }}
-                    placeholder={isLocalGame ? "Ask AI for strategy..." : "Type..."}
-                    maxLength={120}
-                    className="chat-input-field"
-                  />
-                  <button
-                    onClick={sendChat}
-                    disabled={!chatInput.trim()}
-                    className={`btn-chat-go ${chatInput.trim() ? "btn-success" : "btn-dim"}`}
-                  >
-                    ➤
-                  </button>
-                </div>
-              </div>
+              <ChatBox
+                isLocalGame={isLocalGame}
+                displayedChat={displayedChat}
+                myIdx={myIdx}
+                chatInput={chatInput}
+                setChatInput={setChatInput}
+                sendChat={sendChat}
+                chatEndRef={chatEndRef}
+                isMobile
+              />
             )}
           </>
         )}
