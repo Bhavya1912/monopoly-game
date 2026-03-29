@@ -83,6 +83,7 @@ export default function App() {
   const [isLocalGame, setIsLocalGame] = useState(false); // true for AI-only games
   const [lobbyPlayers, setLobbyPlayers] = useState([]);
   const [error, setError] = useState("");
+  const [codeCopied, setCodeCopied] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
   const [showSettings, setShowSettings] = useState(false);
@@ -2159,10 +2160,32 @@ export default function App() {
 
           <div className="room-code-box">
             <p className="room-code-title">ROOM CODE</p>
-            <div className="room-code-text">
+            <div className="room-code-text" style={{ display: "flex", alignItems: "center", gap: "10px", justifyContent: "center" }}>
               {roomCode}
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(roomCode);
+                  setCodeCopied(true);
+                  setTimeout(() => setCodeCopied(false), 2000);
+                }}
+                title="Copy room code"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "1rem",
+                  opacity: 0.8,
+                  padding: "2px 4px",
+                  borderRadius: "4px",
+                  transition: "opacity 0.2s",
+                }}
+              >
+                {codeCopied ? "✅" : "📋"}
+              </button>
             </div>
-            <p className="room-code-title margin-top-8">Share with friends</p>
+            <p className="room-code-title margin-top-8">
+              {codeCopied ? "Copied to clipboard!" : "Share with friends"}
+            </p>
           </div>
 
           {Array.from({ length: maxPlayers }, (_, i) => {
@@ -2496,8 +2519,27 @@ export default function App() {
           <span className="game-title-badge">
             🎲 MONOPOLY
           </span>
-          <span className="room-badge">
+          <span className="room-badge" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
             {roomCode}
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(roomCode);
+                setCodeCopied(true);
+                setTimeout(() => setCodeCopied(false), 2000);
+              }}
+              title="Copy room code"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "0.75rem",
+                padding: "0 2px",
+                opacity: 0.75,
+                lineHeight: 1,
+              }}
+            >
+              {codeCopied ? "✅" : "📋"}
+            </button>
           </span>
           <span className="mode-badge">
             {gs_s.gameMode === "classic"
