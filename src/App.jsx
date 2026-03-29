@@ -26,7 +26,6 @@ import {
   safePlayers,
   safeProps,
   safeLog,
-  safeDice,
   safeSettings,
   estimateAssetValueForPlayer,
   marketGroupKey,
@@ -165,9 +164,10 @@ export default function App() {
 
   const gsRef = useRef(null);
   const myIdxRef = useRef(null);
-  const prevDiceRef = useRef([1, 1]);
-  const prevPositionsRef = useRef(null);
   const aiTimerRef = useRef(null);
+  const prevRollingRef = useRef(false);
+  const prevPositionsRef = useRef(null);
+  const prevDiceRef = useRef([1, 1]);
 
   gsRef.current = gameState;
   myIdxRef.current = myIdx;
@@ -191,19 +191,27 @@ export default function App() {
       }
       if (!data.players) data.players = [];
 
-      const prev = prevDiceRef.current,
-        nd = data.dice;
-      if ((prev[0] !== nd[0] || prev[1] !== nd[1]) && !data.rolling) {
-        prevDiceRef.current = nd;
-        setDiceLanding(true);
-        setTimeout(() => setDiceLanding(false), 500);
-      }
       if (data.rolling) setDiceLanding(false);
+      if (Array.isArray(data.dice) && data.dice.length === 2) {
+        prevDiceRef.current = data.dice;
+      }
       setGameState(data);
       if (data.status === "playing" && screen === "waiting") setScreen("game");
     });
     return () => unsub();
   }, [roomCode, screen]);
+
+  const isRollingActive = gameState?.rolling;
+  useEffect(() => {
+    const prevRolling = prevRollingRef.current;
+    const currentRolling = isRollingActive;
+    prevRollingRef.current = !!currentRolling;
+
+    if (prevRolling === true && !currentRolling) {
+      setDiceLanding(true);
+      setTimeout(() => setDiceLanding(false), 800);
+    }
+  }, [isRollingActive]);
 
   useEffect(() => {
     if (!isLocalGame || aiChatMessages.length === 0) return;
@@ -472,13 +480,20 @@ export default function App() {
             ? nextState.properties
             : {},
         log: Array.isArray(nextState.log) ? nextState.log : [],
-        dice: Array.isArray(nextState.dice) ? nextState.dice : [1, 1],
         players: Array.isArray(nextState.players) ? nextState.players : [],
         rolling: nextState.rolling ?? false,
       };
       if (isLocalGameRef.current) {
-        // Local AI game: update state directly, return a resolved promise
-        setGameState({ ...safe, version: (safe.version ?? 0) + 1 });
+        // Local AI game: update state directly
+        setGameState(prev => {
+          const nextDice = nextState.dice || prev?.dice || [1, 1];
+          return {
+            ...prev,
+            ...safe,
+            dice: nextDice,
+            version: (prev?.version ?? 0) + 1
+          };
+        });
         return Promise.resolve(true);
       }
 
@@ -489,8 +504,11 @@ export default function App() {
         (current) => {
           const currentVersion = current?.version ?? 0;
           if (current && currentVersion !== baseVersion) return;
+          const nextDice = nextState.dice || current?.dice || [1, 1];
           return {
+            ...current,
             ...safe,
+            dice: nextDice,
             version: currentVersion + 1,
           };
         },
@@ -1006,7 +1024,7 @@ export default function App() {
     log.unshift(
       `${player.token} rolls ${d1}+${d2}${isDouble ? " 🎲 Doubles!" : ""}`,
     );
-    pushState({ ...gs, rolling: true, log: log.slice(0, 25) });
+    pushState({ ...gs, rolling: true, dice: [d1, d2], log: log.slice(0, 25) });
     setTimeout(() => {
       if (isDouble) {
         log.unshift(`${player.token} escaped jail with doubles!`);
@@ -1281,7 +1299,7 @@ export default function App() {
         log.unshift(
           `🤖 ${cur.token} rolls for doubles: ${d1}+${d2}${isDouble ? " 🎲 FREE!" : ""}`,
         );
-        pushState({ ...gs, rolling: true, log: log.slice(0, 25) });
+        pushState({ ...gs, rolling: true, dice: [d1, d2], log: log.slice(0, 25) });
         setTimeout(() => {
           if (isDouble) {
             players[gs.currentPlayer] = { ...cur, inJail: false, jailTurns: 0 };
@@ -1370,7 +1388,7 @@ export default function App() {
       newDC = isDouble ? (gs.doubleCount || 0) + 1 : 0;
     const log = safeLog(gs);
     log.unshift(`🤖 ${cur.token} rolls ${d1}+${d2}=${d1 + d2}`);
-    pushState({ ...gs, rolling: true, log: log.slice(0, 25) });
+    pushState({ ...gs, rolling: true, dice: [d1, d2], log: log.slice(0, 25) });
     setTimeout(() => {
       if (newDC === 3) {
         players[gs.currentPlayer] = {
@@ -2048,7 +2066,9 @@ export default function App() {
   });
   const props = safeProps(gameState);
   const logArr = safeLog(gameState);
-  const diceArr = safeDice(gameState);
+  const diceArr = (gameState?.dice && Array.isArray(gameState.dice) && gameState.dice.length === 2)
+    ? gameState.dice
+    : (prevDiceRef.current || [1, 1]);
   const isRolling = gameState.rolling === true;
   const cur = rawPlayers[gameState.currentPlayer];
   const me = rawPlayers[myIdx] || null;
