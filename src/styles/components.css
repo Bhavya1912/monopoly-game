@@ -526,7 +526,6 @@
 /* ── GAME LAYOUT STRUCTURE ── */
 .game-root {
     min-height: 100vh;
-    background: #14532d;
     display: flex;
     flex-direction: column;
     padding: 12px;
