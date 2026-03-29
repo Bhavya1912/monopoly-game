@@ -61,7 +61,13 @@ export function estimatePropertyRent(spaceId, prop, props) {
     ).length;
     return space.rent?.[Math.max(0, Math.min(count - 1, 3))] || 0;
   }
-  if (space.type === "utility") return 28; // average dice roll estimate
+  if (space.type === "utility") {
+    const count = Object.entries(props).filter(
+      ([k, v]) =>
+        v && v.owner === prop.owner && SPACES[+k]?.type === "utility",
+    ).length;
+    return count === 2 ? 70 : 28;
+  }
   if (space.type === "property") {
     const group = COLOR_GROUPS[space.color] || [];
     const monopoly =
@@ -170,35 +176,37 @@ export function calculateMonopolyChance(player, pid, color, ids, props, rawPlaye
   const playersAlive = rawPlayers.filter((p) => p && !p.bankrupt).length || 1;
   const ownRatio = owned / ids.length;
   const moneyFactor = clamp((player.money || 0) / 2200, 0, 1);
+  if (owned === ids.length) return 100;
   let chance =
     ownRatio * 70 + moneyFactor * 15 + ((4 - playersAlive) / 3) * 6 - blocked * 12;
   if (owned === ids.length - 1) chance += 14;
   if (owned === 0) chance *= 0.45;
-  return Math.round(clamp(chance, 2, 95));
+  return Math.round(clamp(chance, 2, 98));
 }
 
 /** Risk of bankruptcy based on cash and upcoming property rent exposures. */
 export function calculateBankruptcyRisk(player, pid, props) {
   const cash = Math.max(player.money || 1, 1);
-  const lookAhead = Array.from(
-    { length: 8 },
+  const lookAheadRange = Array.from(
+    { length: 12 },
     (_, i) => (player.position + i + 1) % 40,
   );
-  const expectedRentExposure =
-    lookAhead.reduce((sum, id) => {
-      const prop = props[id];
-      if (!prop || prop.owner === pid) return sum;
-      return sum + estimatePropertyRent(id, prop, props);
-    }, 0) / 8;
+  const maxPossibleRent = lookAheadRange.reduce((max, id) => {
+    const prop = props[id];
+    if (!prop || prop.owner === pid) return max;
+    const rent = estimatePropertyRent(id, prop, props);
+    return Math.max(max, rent);
+  }, 0);
   const oppStrength =
     Object.entries(props).reduce((sum, [id, prop]) => {
       if (!prop || prop.owner === pid) return sum;
       const upgrades = (prop.houses || 0) + (prop.hotel ? 5 : 0);
-      return sum + estimatePropertyRent(+id, prop, props) * (1 + upgrades * 0.12);
+      return (
+        sum + estimatePropertyRent(+id, prop, props) * (1 + upgrades * 0.15)
+      );
     }, 0) / 40;
-  return Math.round(
-    clamp(((expectedRentExposure + oppStrength) / cash) * 100, 5, 98),
-  );
+  const ratio = (maxPossibleRent * 1.5 + oppStrength * 4) / cash;
+  return Math.round(clamp(ratio * 100, 2, 98));
 }
 
 /** Get insights about completed color sets and their income potential. */

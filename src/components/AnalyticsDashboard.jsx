@@ -54,13 +54,36 @@ export default function AnalyticsDashboard({
               })
               .join(" ");
             return (
-              <polyline
-                key={pid}
-                points={pts}
-                fill="none"
-                stroke={PLAYER_COLORS[pid]}
-                strokeWidth="2.4"
-              />
+              <g key={pid}>
+                <polyline
+                  points={pts}
+                  fill="none"
+                  stroke={PLAYER_COLORS[pid]}
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                {wealthSeries.map((pt, idx) => {
+                  const v = pt.values.find((x) => x.id === pid);
+                  const value = wealthMode === "net" ? v?.net || 0 : v?.assets || 0;
+                  const x =
+                    wealthSeries.length === 1
+                      ? 10
+                      : 10 + idx * (280 / (wealthSeries.length - 1));
+                  const y =
+                    100 -
+                    ((value - chartMin) / (chartMax - chartMin || 1)) * 85;
+                  return (
+                    <circle
+                      key={`pt-${idx}`}
+                      cx={x}
+                      cy={y}
+                      r="2"
+                      fill={PLAYER_COLORS[pid]}
+                    />
+                  );
+                })}
+              </g>
             );
           })}
           {wealthSeries.map((pt, idx) => {
@@ -100,8 +123,8 @@ export default function AnalyticsDashboard({
             </div>
             <div className="meter-track">
               <div
-                className={`player-${p.pid}-bg h-full`}
-                style={{ "--w": `${p.chance}%` }}
+                className={`player-${p.pid}-bg h-full meter-fill`}
+                style={{ width: `${p.chance}%` }}
               />
             </div>
           </div>
@@ -118,8 +141,8 @@ export default function AnalyticsDashboard({
               <span className={`risk-player player-${r.pid}-text`}>P{r.pid + 1}</span>
               <div className="flex-1 meter-track">
                 <div
-                  className={`risk-${riskClass}-bg h-full`}
-                  style={{ "--w": `${r.risk}%` }}
+                  className={`risk-${riskClass}-bg h-full meter-fill`}
+                  style={{ width: `${r.risk}%` }}
                 />
               </div>
               <span className={`risk-value risk-${riskClass}-text`}>
@@ -150,7 +173,12 @@ export default function AnalyticsDashboard({
         <div className="text-xs text-dim margin-top-6">
           Danger zones:{" "}
           {dangerousZones.length
-            ? dangerousZones.map((z) => `${SPACES[z.id]?.name} ($${z.rent})`).join(" • ")
+            ? dangerousZones
+                .map(
+                  (z) =>
+                    `${SPACES[z.id]?.name} (P${z.owner + 1} • $${z.rent})`,
+                )
+                .join(" • ")
             : "none yet"}
         </div>
       </div>
