@@ -1427,7 +1427,14 @@ export default function App() {
       log: log.slice(0, 25),
       turnStartTime: Date.now(),
       modal: null,
-    }).then(() => setProcessing(false));
+    }).then((committed) => {
+      if (!committed) {
+        // Transaction failed due to version mismatch — retry with latest state
+        setTimeout(() => advanceTurn(gsRef.current), 200);
+      } else {
+        setProcessing(false);
+      }
+    });
   };
 
   const endTurn = () => {
