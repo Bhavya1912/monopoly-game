@@ -2767,7 +2767,7 @@ export default function App() {
                   <span className="text-xl">{me.token}</span>
                   <div className="flex-1">
                     <div className="flex-column">
-                      <div className="text-md weight-bold text-success">
+                      <div className={`text-md weight-bold player-${myIdx}-text`}>
                         You (P{myIdx + 1})
                       </div>
                       <div className="text-sm weight-bold text-black">
