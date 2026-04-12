@@ -1,116 +1,28 @@
-# 🎲 Monopoly Game (React + Firebase)
+# 🎲 Monopoly Game
 
-A fast-paced, browser-based Monopoly-inspired game with real-time multiplayer rooms, configurable game modes, AI opponents, and a strategy dashboard.
+A fast-paced, digital reimagining of the classic property trading board game. Built for the modern web with real-time multiplayer, AI opponents, and deep strategic insights.
 
-> Built with **React + Vite** and synchronized via **Firebase Realtime Database**.
+## ✨ Features
 
----
-
-## ✨ Highlights
-
-- 🌐 **Real-time multiplayer rooms** with shareable room codes.
-- 🤖 **Play vs AI** with adjustable difficulty and personality.
-- ⚙️ **Flexible game settings**:
-  - turn timer (or no timer)
-  - classic / timed / target-money modes
-  - configurable AI slots
-- 🧠 **Strategy panel** with live indicators (threat zones, monopoly chance, rent pressure).
-- 🎴 **Chance / Community Chest / Free Parking events** with special effects.
-- 🏠 **Property management** with monopoly detection, house/hotel upgrades, and rent scaling.
-- 📱 **Responsive UI** optimized for desktop and smaller screens.
+- **Real-Time Multiplayer**: Instant sync using Firebase Realtime Database. Join games seamlessly via 6-character room codes.
+- **Smart AI Opponents**: Play solo or fill rooms with AI. Features adjustable difficulties and behaviors (aggressive, defensive, balanced).
+- **Flexible Game Modes**:
+  - *Classic*: Last player standing.
+  - *Timed*: Highest net worth at the buzzer.
+  - *Target*: First to reach a designated cash threshold.
+  - Optional fast-paced settings like turn timers.
+- **Advanced Game Mechanics**: Property management with dynamic rent scaling, housing/hotel upgrades, interactive Chance/Community Chest cards, and real-time bankruptcy risks.
+- **Strategy Dashboard**: Live game analytics, monopoly chance estimators, and heatmaps of threat zones.
+- **Responsive UI**: Plays perfectly on desktop, tablet, and mobile displays.
 
 ---
 
 ## 🧱 Tech Stack
 
-- **Frontend:** React 19, Vite 7
-- **State sync / backend service:** Firebase Realtime Database
-- **Linting:** ESLint
-
----
-
-## 🚀 Quick Start
-
-### 1) Clone and install
-
-```bash
-git clone <your-repo-url>
-cd monopoly-game
-npm install
-```
-
-### 2) Run locally
-
-```bash
-npm run dev
-```
-
-Open the local URL shown by Vite (typically `http://localhost:5173`).
-
-### 3) Build for production
-
-```bash
-npm run build
-npm run preview
-```
-
----
-
-## 🔥 Firebase Configuration
-
-This project is currently configured with Firebase directly in `src/App.jsx`.
-
-If you want to use your own Firebase project:
-
-1. Create a Firebase project.
-2. Enable **Realtime Database**.
-3. Replace the `firebaseConfig` object in `src/App.jsx` with your project credentials.
-4. Ensure database rules allow your intended usage pattern (development vs production security).
-
-> ✅ Recommendation: move Firebase config to environment variables before deploying publicly.
-
----
-
-## 🎮 How to Play
-
-### Multiplayer
-
-1. One player creates a room and shares the 6-character code.
-2. Other players join using that room code.
-3. Host starts the game once enough players have joined.
-
-### VS AI
-
-1. Select **vs AI** mode in the lobby.
-2. Choose number of AI opponents.
-3. Set AI difficulty/personality and start.
-
-### Core gameplay loop
-
-- Roll dice and move around the board.
-- Buy unowned properties you land on.
-- Pay rent when landing on opponent-owned assets.
-- Build houses/hotels on monopoly sets.
-- Survive bankruptcies and outlast opponents (or hit game objective by mode).
-
----
-
-## 🕹️ Game Modes
-
-- **Classic:** play until one player remains.
-- **Timed:** highest-performing player at timer end wins.
-- **Target:** first player to reach target cash wins.
-
-Optional **turn timer** can enforce faster turns.
-
----
-
-## 📜 Available Scripts
-
-- `npm run dev` — start local dev server.
-- `npm run build` — create production build.
-- `npm run preview` — preview production build locally.
-- `npm run lint` — run ESLint checks.
+- **Frontend core**: React 19 + Vite 7
+- **Backend / Real-time Sync**: Firebase Realtime Database 12
+- **Styling**: Vanilla CSS (Modular, optimized)
+- **Linting & Tooling**: ESLint 9
 
 ---
 
@@ -118,12 +30,20 @@ Optional **turn timer** can enforce faster turns.
 
 ```text
 monopoly-game/
-├─ public/
+├─ public/                 # Static public files
 ├─ src/
-│  ├─ App.jsx        # main game logic + UI + Firebase syncing
-│  ├─ App.css
-│  ├─ index.css
-│  └─ main.jsx
+│  ├─ assets/              # Images, sounds, and icons
+│  ├─ components/          # Reusable UI elements (Board, Panels, Modals)
+│  ├─ game/                # Core game rules & logic modules
+│  ├─ hooks/               # Custom React hooks for local state and intervals
+│  ├─ services/            # External integrations (Firebase config)
+│  ├─ styles/              # Global variables (index.css) and shared CSS
+│  ├─ utils/               # Math, analytics, and helper functions
+│  ├─ ai.js                # AI opponent decision engine
+│  ├─ App.jsx              # Main application root and synchronization engine
+│  ├─ constants.js         # Core board data, cards, and configuration
+│  ├─ main.jsx             # React entry point
+│  └─ soundManager.js      # Game audio orchestration
 ├─ index.html
 ├─ package.json
 └─ vite.config.js
@@ -131,37 +51,67 @@ monopoly-game/
 
 ---
 
-## 🧪 Quality Checks
+## 🚀 Getting Started
 
-Before pushing changes:
+### 1. Installation
+
+Clone the repository and install the dependencies:
 
 ```bash
-npm run lint
-npm run build
+git clone <your-repo-url>
+cd monopoly-game
+npm install
 ```
+
+### 2. Running Locally
+
+Start the Vite development server:
+
+```bash
+npm run dev
+```
+
+The game will be available at `http://localhost:5173`.
+
+---
+
+## 📜 Available Scripts
+
+- `npm run dev`: Starts the local development server.
+- `npm run build`: Bundles the app for production.
+- `npm run preview`: Previews the local production build.
+- `npm run lint`: Runs ESLint for code formatting and quality checks.
+
+---
+
+## 🔐 Environment & Services
+
+Authentication and Database sync are handled directly by Firebase. 
+
+Out of the box, the project points to a development Firebase environment. To use your own backend:
+1. Create a project at the [Firebase console](https://console.firebase.google.com/).
+2. Enable **Realtime Database**.
+3. Overwrite the `firebaseConfig` object inside `src/services/firebase.js` with your own credentials. 
+*(Note: It is highly recommended to extract these to `.env` variables before deploying to production!)*
+
+---
+
+## 🏗 Architecture Notes
+
+The game engine is primarily coordinated within `App.jsx`, utilizing a highly optimized, single-source-of-truth syncing model:
+- **State Synchronization**: Modifying game state natively utilizes standard React state hooks in local games, but switches to robust, lock-safe Firebase transactions (`runTransaction`) when communicating changes in multiplayer rooms.
+- **Event-Driven**: Dice rolls, trades, and board animations propagate via deterministic logs and explicit Firebase flags to ensure all clients play out animations concurrently.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome.
+Contributions, bug reports, and feature requests are welcome!
 
-Suggested workflow:
+1. Fork the project.
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+4. Push to the branch (`git push origin feature/AmazingFeature`).
+5. Open a Pull Request.
 
-1. Fork the repo.
-2. Create a feature branch.
-3. Make changes + run lint/build.
-4. Open a pull request with a clear summary and screenshots for UI changes.
-
----
-
-## 📌 Notes
-
-- This game is inspired by Monopoly mechanics for educational/entertainment purposes.
-- If you deploy publicly, review Firebase security rules and move secrets/config to env-based setup.
-
----
-
-## 📄 License
-
-Add your preferred license (e.g., MIT) in a `LICENSE` file.
+Please ensure you run `npm run lint` and `npm run build` before opening up a pull request.
