@@ -1,15 +1,17 @@
 # Code Review – Monopoly Game
 
-## Scope reviewed
-- Repository structure and core source files (`src/App.jsx`, `src/constants.js`, `src/ai.js`, `src/utils.js`, and styling/component files).
-- Static checks (`npm run lint`, `npm run build`).
-- Focus areas: architecture, multiplayer correctness, maintainability, and gameplay depth.
+## Scope & Context
+- **Date of Review:** Live Document (Last updated April 2026)
+- **Review Objectives:** Assess architecture, multiplayer correctness, maintainability, Component UI, and gameplay depth.
+- **Repository coverage:** Core source files (`src/App.jsx`, `src/constants.js`, `src/ai.js`, `src/utils.js`), styling, and component files.
+- **Static checks evaluated:** `npm run lint`, `npm run build`.
 
 ## What looks good
 1. **Strong baseline quality checks**: lint/build scripts run cleanly.
 2. **Defensive helpers**: `safePlayers`, `safeProps`, `safeLog`, etc. reduce crash risk from malformed realtime payloads.
 3. **Clear board-domain constants**: board spaces, card pools, and settings are centralized and readable.
 4. **Good UI decomposition** for board cells, modal overlays, and timers.
+5. **Component Reliability**: Recent prop validation passes, and the Strategy Dashboard UI has been styled and stabilized.
 
 ## Key engineering findings (highest priority first)
 
@@ -29,21 +31,30 @@
 - Use transactions for both room creation and lobby seat reservation.
 - Retry generated room codes when transaction fails.
 
-### 3) `App.jsx` is a monolith (maintainability risk)
-- Rules engine + networking + render logic are tightly coupled.
-- Hard to unit test and reason about side effects.
+### 3) `App.jsx` Refactoring (ongoing effort)
+- *Status: Partially Addressed.* Recent work has improved component prop validation, removed unused imports, and modularized some event handlers.
+- However, `App.jsx` still couples the rules engine + networking + render logic (at ~80KB).
+- **Recommendation:** Continue the extraction effort:
+  - Isolate pure rules into `src/game/engine.js`.
+  - Move the primary realtime sync logic into a clean `src/hooks/useRealtimeRoom.js`.
 
-**Recommendation**
-- Extract pure rules into `src/game/engine.js`.
-- Extract realtime sync into `src/hooks/useRealtimeRoom.js`.
+## Technical Debt & Developer Experience (DX)
 
-### 4) Firebase config management is inconsistent with docs
+### 1) Missing Automated Test Coverage
+- The project currently relies entirely on manual testing and static linting.
+- Given the complex rules system, this is a major regression risk to any refactoring efforts.
+
+**Recommendation:**
+- Integrate a test runner like Vitest.
+- Write unit tests for pure logic files (`src/utils.js`, `src/ai.js`, and the future isolated rules engine).
+
+### 2) Firebase config management is inconsistent with docs
 - Implementation still keeps concrete config in source.
 - README guidance and actual file locations have drifted.
 
-**Recommendation**
+**Recommendation:**
 - Move to `import.meta.env.VITE_*` and add `.env.example`.
-- Refresh README setup paths.
+- Refresh README setup paths to align with standard env patterns.
 
 ## Gameplay improvements to make the game more interesting
 
@@ -110,6 +121,11 @@
 ### Phase 1 (correctness first)
 1. Transactional writes + versioning.
 2. Transactional lobby join/create.
+3. Finish React refactor: Engine separation from UI.
+4. Set up Env config & update README.
+
+### Phase 1.5 (developer experience)
+1. Setup Vitest and begin writing tests for `ai.js` and `utils.js`.
 
 ### Phase 2 (fun features)
 1. Public auctions.
