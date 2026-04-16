@@ -29,7 +29,7 @@ export const safeDice = (gs) =>
   Array.isArray(gs?.dice) && gs.dice.length === 2 ? gs.dice : [1, 1];
 export const safeSettings = (gs) => ({
   ...DEFAULT_SETTINGS,
-  ...(gs?.settings || {}),
+  ...gs?.settings,
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ export function isPropertyInCompleteSet(spaceId, props) {
   const prop = props?.[spaceId];
   if (!prop) return false;
   const space = SPACES[spaceId];
-  if (!space || space.type !== "property" || !space.color) return false;
+  if (space?.type !== "property" || !space?.color) return false;
   const group = COLOR_GROUPS[space.color] || [];
   return group.length > 0 && group.every((id) => props[id]?.owner === prop.owner);
 }
