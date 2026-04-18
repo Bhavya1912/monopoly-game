@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ref, set, onValue, update, runTransaction } from "firebase/database";
+import { ref, onValue, update, runTransaction } from "firebase/database";
 
 // ─── Services ────────────────────────────────────────────────────────────────
 import { db } from "./services/firebase";
 
 // ─── Data constants ──────────────────────────────────────────────────────────
 import {
-  STYLE,
   SPACES,
   COLOR_GROUPS,
   CHANCE_CARDS,
@@ -15,7 +14,6 @@ import {
   ROUND_EVENTS,
   PLAYER_COLORS,
   PLAYER_TOKENS,
-  CELL_POSITIONS,
   DEFAULT_SETTINGS,
   COLOR_LABELS,
 } from "./constants";
@@ -40,17 +38,12 @@ import {
 
 // ─── AI logic ────────────────────────────────────────────────────────────────
 import {
-  AI_DIFFICULTY,
-  AI_PERSONALITY,
   aiShouldBuy,
   aiShouldBuild,
   aiJailStrategy,
 } from "./ai";
 
 // ─── Components ──────────────────────────────────────────────────────────────
-import BoardPopup from "./components/BoardPopup";
-import TurnTimer from "./components/TurnTimer";
-import GameTimer from "./components/GameTimer";
 import LobbyView from "./components/LobbyView";
 import WaitingView from "./components/WaitingView";
 import GameOverView from "./components/GameOverView";
@@ -168,6 +161,7 @@ export default function App() {
   const prevRollingRef = useRef(false);
   const prevPositionsRef = useRef(null);
   const prevDiceRef = useRef([1, 1]);
+  const localVersionRef = useRef(0);
 
   gsRef.current = gameState;
   myIdxRef.current = myIdx;
@@ -195,6 +189,7 @@ export default function App() {
       if (Array.isArray(data.dice) && data.dice.length === 2) {
         prevDiceRef.current = data.dice;
       }
+      localVersionRef.current = data.version || 0;
       setGameState(data);
       if (data.status === "playing" && screen === "waiting") setScreen("game");
     });
@@ -472,39 +467,66 @@ export default function App() {
   isLocalGameRef.current = isLocalGame;
 
   const pushState = useCallback(
-    (nextState) => {
-      const safe = {
-        ...nextState,
-        properties:
-          nextState.properties && typeof nextState.properties === "object"
-            ? nextState.properties
-            : {},
-        log: Array.isArray(nextState.log) ? nextState.log : [],
-        players: Array.isArray(nextState.players) ? nextState.players : [],
-        rolling: nextState.rolling ?? false,
-      };
+    (nextStateOrUpdater) => {
       if (isLocalGameRef.current) {
         // Local AI game: update state directly
-        setGameState(prev => {
-          const nextDice = nextState.dice || prev?.dice || [1, 1];
+        setGameState((prev) => {
+          const next =
+            typeof nextStateOrUpdater === "function"
+              ? nextStateOrUpdater(prev)
+              : nextStateOrUpdater;
+          const safe = {
+            ...next,
+            properties:
+              next.properties && typeof next.properties === "object"
+                ? next.properties
+                : {},
+            log: Array.isArray(next.log) ? next.log : [],
+            players: Array.isArray(next.players) ? next.players : [],
+            rolling: next.rolling ?? false,
+          };
+          const nextDice = next.dice || prev?.dice || [1, 1];
+          const newVersion = (prev?.version ?? 0) + 1;
+          localVersionRef.current = newVersion;
           return {
             ...prev,
             ...safe,
             dice: nextDice,
-            version: (prev?.version ?? 0) + 1
+            version: newVersion,
           };
         });
         return Promise.resolve(true);
       }
 
-      const baseVersion = gsRef.current?.version ?? 0;
+      const baseVersion = localVersionRef.current;
       const stateRef = ref(db, `games/${roomCode}/state`);
       return runTransaction(
         stateRef,
         (current) => {
-          const currentVersion = current?.version ?? 0;
-          if (current && currentVersion !== baseVersion) return;
-          const nextDice = nextState.dice || current?.dice || [1, 1];
+          if (!current) return current;
+          const currentVersion = current.version ?? 0;
+
+          let next;
+          if (typeof nextStateOrUpdater === "function") {
+            next = nextStateOrUpdater(current);
+          } else {
+            // Strict version check for full-state updates to prevent overwriting
+            if (currentVersion !== baseVersion) return; // Conflict (Abort)
+            next = nextStateOrUpdater;
+          }
+
+          const safe = {
+            ...next,
+            properties:
+              next.properties && typeof next.properties === "object"
+                ? next.properties
+                : {},
+            log: Array.isArray(next.log) ? next.log : [],
+            players: Array.isArray(next.players) ? next.players : [],
+            rolling: next.rolling ?? false,
+          };
+
+          const nextDice = next.dice || current.dice || [1, 1];
           return {
             ...current,
             ...safe,
@@ -513,7 +535,12 @@ export default function App() {
           };
         },
         { applyLocally: true },
-      ).then((res) => res.committed);
+      ).then((res) => {
+        if (res.committed && res.snapshot.exists()) {
+          localVersionRef.current = res.snapshot.val().version;
+        }
+        return res.committed;
+      });
     },
     [roomCode],
   );
@@ -594,29 +621,42 @@ export default function App() {
 
   // ── Sell property (for bankruptcy prevention) ──
   const sellProperty = (spaceId) => {
-    if (!gameState) return;
-    const gs = gsRef.current;
-    const players = safePlayers(gs).map((p) => ({ ...p }));
-    const props = safeProps(gs);
-    const prop = props[spaceId];
-    if (!prop) return;
-    const space = SPACES[spaceId];
-    const sellPrice = Math.floor((space.price || 0) / 2);
-    players[prop.owner] = {
-      ...players[prop.owner],
-      money: players[prop.owner].money + sellPrice,
-    };
-    const newProps = { ...props };
-    delete newProps[spaceId];
-    const log = safeLog(gs);
-    log.unshift(
-      `${players[prop.owner].token} sold ${space.name} for $${sellPrice}`,
-    );
-    // Check if debt cleared
-    if (sellToPay && players[prop.owner].money >= sellToPay.amount) {
-      setSellToPay(null);
-    }
-    pushState({ ...gs, players, properties: newProps, log: log.slice(0, 25) });
+    pushState((current) => {
+      const props = safeProps(current);
+      const prop = props[spaceId];
+      if (!prop) return;
+
+      const pArr = safePlayers(current).map((p) => ({ ...p }));
+      const space = SPACES[spaceId];
+      if (!space) return;
+
+      const ownerIdx = prop.owner;
+      const owner = pArr[ownerIdx];
+      if (!owner) return;
+
+      const sellPrice = Math.floor((space.price || 0) / 2);
+      pArr[ownerIdx] = {
+        ...owner,
+        money: owner.money + sellPrice,
+      };
+
+      const newProps = { ...props };
+      delete newProps[spaceId];
+
+      const nxtLog = safeLog(current);
+      nxtLog.unshift(`${owner.token} sold ${space.name} for $${sellPrice}`);
+
+      // Check if debt cleared locally (if this was triggered by sellToPay)
+      if (sellToPay && ownerIdx === myIdx && pArr[ownerIdx].money >= sellToPay.amount) {
+        setSellToPay(null);
+      }
+
+      return {
+        players: pArr,
+        properties: newProps,
+        log: nxtLog.slice(0, 25),
+      };
+    });
   };
 
   // ── Space action handler ──
@@ -634,60 +674,63 @@ export default function App() {
     const players = safePlayers(gs).map((p) => ({ ...p }));
     const log = safeLog(gs);
     const curIdx = gs.currentPlayer;
-    const s = safeSettings(gs);
-    const now = Date.now();
 
     const finishTurn = (updP, updProps, updFP, modal, forceEnd) => {
-      const finalPlayers = updP || players;
+      pushState((current) => {
+        const players = safePlayers(current).map((p) => ({ ...p }));
+        const currentProps = safeProps(current);
+        const finalPlayers = updP ? players.map((p, i) => (updP[i] ? { ...p, ...updP[i] } : p)) : players;
 
-      // Lock visual positions for anyone who teleported (e.g. via Cards)
-      finalPlayers.forEach((p, i) => {
-        const old = players[i];
-        if (old && p && old.position !== p.position) {
-          setVisualPositions((prev) => ({ ...prev, [p.id]: old.position }));
-        }
-      });
+        // Lock visual positions for anyone who teleported
+        finalPlayers.forEach((p, i) => {
+          const old = players[i];
+          if (old && p && old.position !== p.position) {
+            setVisualPositions((prev) => ({ ...prev, [p.id]: old.position }));
+          }
+        });
 
-      // Decrement special-effect counters
-      finalPlayers.forEach((p, i) => {
-        if (p && (p.doubleRentTurns || 0) > 0)
-          finalPlayers[i] = { ...p, doubleRentTurns: p.doubleRentTurns - 1 };
-        if (p && (p.rentImmuneTurns || 0) > 0)
-          finalPlayers[i] = {
-            ...finalPlayers[i],
-            rentImmuneTurns: p.rentImmuneTurns - 1,
-          };
-      });
-      // Target win check
-      if (s.gameMode === "target") {
-        const w = finalPlayers.find(
-          (p) => !p.bankrupt && p.money >= (s.targetAmount || 10000),
-        );
-        if (w) {
-          log.unshift(`🏆 ${w.token} reached $${s.targetAmount}!`);
-          pushState({
-            ...gs,
-            players: finalPlayers,
-            properties: updProps !== undefined ? updProps : props,
-            freePot: updFP !== undefined ? updFP : gs.freePot || 0,
-            rolling: false,
-            status: "gameover",
-            modal: null,
-            log: log.slice(0, 25),
-          }).then(() => setProcessing(false));
-          return;
+        // Decrement special-effect counters
+        finalPlayers.forEach((p, i) => {
+          if (p && (p.doubleRentTurns || 0) > 0)
+            finalPlayers[i] = { ...p, doubleRentTurns: p.doubleRentTurns - 1 };
+          if (p && (p.rentImmuneTurns || 0) > 0)
+            finalPlayers[i] = {
+              ...finalPlayers[i],
+              rentImmuneTurns: p.rentImmuneTurns - 1,
+            };
+        });
+
+        // Target win check
+        const s = safeSettings(current);
+        if (s.gameMode === "target") {
+          const w = finalPlayers.find(
+            (p) => !p.bankrupt && p.money >= (s.targetAmount || 10000),
+          );
+          if (w) {
+            const nxtLog = safeLog(current);
+            nxtLog.unshift(`🏆 ${w.token} reached $${s.targetAmount}!`);
+            return {
+              players: finalPlayers,
+              properties: updProps !== undefined ? updProps : currentProps,
+              freePot: updFP !== undefined ? updFP : current.freePot || 0,
+              rolling: false,
+              status: "gameover",
+              modal: null,
+              log: nxtLog.slice(0, 25),
+            };
+          }
         }
-      }
-      pushState({
-        ...gs,
-        players: finalPlayers,
-        properties: updProps !== undefined ? updProps : props,
-        freePot: updFP !== undefined ? updFP : gs.freePot || 0,
-        rolled: forceEnd ? true : !isDouble,
-        rolling: false,
-        modal: modal || null,
-        log,
-        turnStartTime: forceEnd || !isDouble ? now : gs.turnStartTime,
+
+        return {
+          players: finalPlayers,
+          properties: updProps !== undefined ? updProps : currentProps,
+          freePot: updFP !== undefined ? updFP : current.freePot || 0,
+          rolled: forceEnd ? true : !isDouble,
+          rolling: false,
+          modal: modal || null,
+          log: safeLog(current),
+          turnStartTime: forceEnd || !isDouble ? Date.now() : current.turnStartTime,
+        };
       }).then(() => setProcessing(false));
     };
 
@@ -914,7 +957,7 @@ export default function App() {
         const hasMonopoly =
           space.type === "property" &&
           group.every((id) => props[id]?.owner === curIdx);
-          
+
         log.unshift(`🏠 ${player.token} rests on their own property (${space.name}).`);
 
         if (!player.isAI) {
@@ -975,37 +1018,45 @@ export default function App() {
     finishTurn(players, undefined, (gs.freePot || 0) + amount, null, false);
   }
 
-  const doMoveAndAction = (player, steps, gs, props, isDouble, d1, d2) => {
-    const players = safePlayers(gs).map((p) => ({ ...p }));
-    const oldPos = player.position,
-      newPos = (oldPos + steps) % 40;
-    const log = safeLog(gs);
-    let bonus = 0;
-    if (oldPos + steps >= 40) {
-      bonus = 200;
-      log.unshift(`${player.token} passed GO — +$200!`);
-    }
-    log.unshift(`${player.token} → ${SPACES[newPos].name}`);
-    const updPlayer = {
-      ...player,
-      position: newPos,
-      money: player.money + bonus,
-    };
-    players[gs.currentPlayer] = updPlayer;
-    const newGs = {
-      ...gs,
-      players,
-      dice: [d1, d2],
-      log: log.slice(0, 25),
-      rolling: false,
-    };
-    const TOTAL_ANIM_MS = steps * 200 + 300;
-    setVisualPositions((prev) => ({ ...prev, [player.id]: oldPos }));
-    pushState(newGs).then(() => {
-      setTimeout(
-        () => doSpaceAction(newPos, updPlayer, newGs, props, isDouble),
-        TOTAL_ANIM_MS,
-      );
+  const doMoveAndAction = (playerIdx, steps, d1, d2, isDouble) => {
+    pushState((current) => {
+      const players = safePlayers(current).map((p) => ({ ...p }));
+      const player = players[playerIdx];
+      if (!player || player.bankrupt) return;
+
+      const oldPos = player.position;
+      const newPos = (oldPos + steps) % 40;
+      const log = safeLog(current);
+
+      if (newPos < oldPos && newPos !== 0) {
+        player.money += 200;
+        log.unshift(`${player.token} passed GO — +$200!`);
+      }
+      player.position = newPos;
+      players[playerIdx] = player;
+
+      const newDoubles = isDouble ? (current.doubleCount || 0) + 1 : 0;
+      log.unshift(`${player.token} moves to ${SPACES[newPos].name}`);
+
+      return {
+        players,
+        doubleCount: newDoubles,
+        log: log.slice(0, 25),
+        rolling: false,
+        dice: [d1, d2],
+        turnStartTime: Date.now(), // reset timer for space action
+      };
+    }).then((committed) => {
+      if (committed) {
+        const TOTAL_ANIM_MS = steps * 250 + 400;
+        setTimeout(() => {
+          const latest = gsRef.current;
+          const upP = safePlayers(latest)[playerIdx];
+          doSpaceAction(upP.position, upP, latest, safeProps(latest), isDouble);
+        }, TOTAL_ANIM_MS);
+      } else {
+        setProcessing(false);
+      }
     });
   };
 
@@ -1015,7 +1066,6 @@ export default function App() {
     setProcessing(true);
     const gs = gsRef.current;
     const players = safePlayers(gs).map((p) => ({ ...p }));
-    const props = safeProps(gs);
     const player = players[gs.currentPlayer];
     const d1 = Math.ceil(Math.random() * 6),
       d2 = Math.ceil(Math.random() * 6);
@@ -1041,7 +1091,7 @@ export default function App() {
         };
         pushState(newGs).then(() =>
           setTimeout(
-            () => doMoveAndAction(freed, d1 + d2, newGs, props, false, d1, d2),
+            () => doMoveAndAction(myIdx, d1 + d2, d1, d2, false),
             300,
           ),
         );
@@ -1055,7 +1105,6 @@ export default function App() {
             inJail: false,
             jailTurns: 0,
           };
-          const freed = players[gs.currentPlayer];
           const newGs = {
             ...gs,
             players,
@@ -1066,8 +1115,7 @@ export default function App() {
           };
           pushState(newGs).then(() =>
             setTimeout(
-              () =>
-                doMoveAndAction(freed, d1 + d2, newGs, props, false, d1, d2),
+              () => doMoveAndAction(myIdx, d1 + d2, d1, d2, false),
               300,
             ),
           );
@@ -1191,15 +1239,7 @@ export default function App() {
         }).then(() => setProcessing(false));
         return;
       }
-      doMoveAndAction(
-        player,
-        d1 + d2,
-        { ...gs, players, doubleCount: newDC, log: log.slice(0, 25) },
-        safeProps(gs),
-        isDouble,
-        d1,
-        d2,
-      );
+      doMoveAndAction(myIdx, d1 + d2, d1, d2, isDouble);
     }, 900);
   };
 
@@ -1277,16 +1317,7 @@ export default function App() {
           };
           pushState(newGs).then(() =>
             setTimeout(
-              () =>
-                doMoveAndAction(
-                  players[gs.currentPlayer],
-                  d1 + d2,
-                  newGs,
-                  safeProps(gs),
-                  false,
-                  d1,
-                  d2,
-                ),
+              () => doMoveAndAction(gs.currentPlayer, d1 + d2, d1, d2, false),
               300,
             ),
           );
@@ -1312,16 +1343,7 @@ export default function App() {
             };
             pushState(newGs).then(() =>
               setTimeout(
-                () =>
-                  doMoveAndAction(
-                    players[gs.currentPlayer],
-                    d1 + d2,
-                    newGs,
-                    safeProps(gs),
-                    false,
-                    d1,
-                    d2,
-                  ),
+                () => doMoveAndAction(gs.currentPlayer, d1 + d2, d1, d2, false),
                 300,
               ),
             );
@@ -1342,16 +1364,7 @@ export default function App() {
               };
               pushState(newGs).then(() =>
                 setTimeout(
-                  () =>
-                    doMoveAndAction(
-                      players[gs.currentPlayer],
-                      d1 + d2,
-                      newGs,
-                      safeProps(gs),
-                      false,
-                      d1,
-                      d2,
-                    ),
+                  () => doMoveAndAction(gs.currentPlayer, d1 + d2, d1, d2, false),
                   300,
                 ),
               );
@@ -1391,89 +1404,73 @@ export default function App() {
     pushState({ ...gs, rolling: true, dice: [d1, d2], log: log.slice(0, 25) });
     setTimeout(() => {
       if (newDC === 3) {
-        players[gs.currentPlayer] = {
-          ...cur,
-          position: 10,
-          inJail: true,
-          jailTurns: 0,
-        };
-        pushState({
-          ...gs,
-          players,
-          dice: [d1, d2],
-          rolled: true,
-          rolling: false,
-          doubleCount: 0,
-          log: log.slice(0, 25),
+        pushState((current) => {
+          const pid = current.currentPlayer;
+          const pArr = safePlayers(current).map((p, i) =>
+            i === pid ? { ...p, position: 10, inJail: true, jailTurns: 0 } : p,
+          );
+          const nxtLog = safeLog(current);
+          nxtLog.unshift(`${pArr[pid]?.token || "AI"} rolled 3 doubles — Jail! 🔒`);
+          return {
+            players: pArr,
+            dice: [d1, d2],
+            rolled: true,
+            rolling: false,
+            doubleCount: 0,
+            log: nxtLog.slice(0, 25),
+          };
         }).then(() => setProcessing(false));
         return;
       }
-      doMoveAndAction(
-        cur,
-        d1 + d2,
-        { ...gs, players, doubleCount: newDC, log: log.slice(0, 25) },
-        safeProps(gs),
-        isDouble,
-        d1,
-        d2,
-      );
+      doMoveAndAction(gs.currentPlayer, d1 + d2, d1, d2, isDouble);
     }, 900);
   };
 
-  const advanceTurn = (gs) => {
-    const players = safePlayers(gs);
-    const active = players.filter((p) => p && !p.bankrupt);
-    if (active.length <= 1) {
-      pushState({ ...gs, status: "gameover" }).then(() => setProcessing(false));
-      return;
-    }
-    let next = (gs.currentPlayer + 1) % players.length;
-    while (players[next]?.bankrupt) next = (next + 1) % players.length;
-    const log = safeLog(gs);
-    const isAI = players[next]?.isAI;
-    const settings = safeSettings(gs);
-    const wrappedRound = next <= gs.currentPlayer;
-    const nextTurnCount = (gs.turnCount || 1) + 1;
-    let nextPlayers = players.map((p) => (p ? { ...p } : p));
-    let nextFreePot = gs.freePot || 0;
-    let marketModifiers = gs.marketModifiers || randomMarketModifiers();
+  const advanceTurn = () => {
+    pushState((current) => {
+      const p = safePlayers(current);
+      const active = p.filter((pl) => pl && !pl.bankrupt);
+      if (active.length <= 1) return { status: "gameover" };
 
-    if (wrappedRound && settings.dynamicMarket) {
-      marketModifiers = randomMarketModifiers();
-      log.unshift("📉 Market shifted this round. Property rents were re-priced!");
-    }
+      let nxt = (current.currentPlayer + 1) % p.length;
+      while (p[nxt]?.bankrupt) nxt = (nxt + 1) % p.length;
 
-    if (
-      wrappedRound &&
-      settings.eventRounds &&
-      nextTurnCount % Math.max(2, settings.eventInterval || 4) === 0
-    ) {
-      const outcome = runRoundEvent(nextPlayers, safeProps(gs), nextFreePot, log);
-      nextPlayers = outcome.nextPlayers;
-      nextFreePot = outcome.nextFreePot;
-    }
+      const nxtLog = safeLog(current);
+      const s = safeSettings(current);
+      const wrapped = nxt <= current.currentPlayer;
+      const nxtTurnCount = (current.turnCount || 1) + 1;
+      let nxtPlayers = p.map((pl) => (pl ? { ...pl } : pl));
+      let nxtFreePot = current.freePot || 0;
+      let mkt = current.marketModifiers || randomMarketModifiers();
 
-    log.unshift(`▶ Player ${next + 1}${isAI ? " 🤖" : ""}'s turn`);
-    pushState({
-      ...gs,
-      players: nextPlayers,
-      currentPlayer: next,
-      rolled: false,
-      doubleCount: 0,
-      rolling: false,
-      freePot: nextFreePot,
-      marketModifiers,
-      turnCount: nextTurnCount,
-      log: log.slice(0, 25),
-      turnStartTime: Date.now(),
-      modal: null,
-    }).then((committed) => {
-      if (!committed) {
-        // Transaction failed due to version mismatch — retry with latest state
-        setTimeout(() => advanceTurn(gsRef.current), 200);
-      } else {
-        setProcessing(false);
+      if (wrapped && s.dynamicMarket) {
+        mkt = randomMarketModifiers();
+        nxtLog.unshift("📉 Market shifted this round. Property rents were re-priced!");
       }
+
+      if (wrapped && s.eventRounds && nxtTurnCount % Math.max(2, s.eventInterval || 4) === 0) {
+        const outcome = runRoundEvent(nxtPlayers, safeProps(current), nxtFreePot, nxtLog);
+        nxtPlayers = outcome.nextPlayers;
+        nxtFreePot = outcome.nextFreePot;
+      }
+
+      nxtLog.unshift(`▶ Player ${nxt + 1}${nxtPlayers[nxt]?.isAI ? " 🤖" : ""}'s turn`);
+
+      return {
+        players: nxtPlayers,
+        currentPlayer: nxt,
+        rolled: false,
+        doubleCount: 0,
+        rolling: false,
+        freePot: nxtFreePot,
+        marketModifiers: mkt,
+        turnCount: nxtTurnCount,
+        log: nxtLog.slice(0, 25),
+        turnStartTime: Date.now(),
+        modal: null,
+      };
+    }).then(() => {
+      setProcessing(false);
     });
   };
 
@@ -1494,15 +1491,7 @@ export default function App() {
       const players = safePlayers(gs).map((p) => ({ ...p }));
       const player = players[gs.currentPlayer];
       if (player && !player.bankrupt)
-        doMoveAndAction(
-          player,
-          d1 + d2,
-          { ...gs, players, doubleCount: 0, log: log.slice(0, 25) },
-          safeProps(gs),
-          false,
-          d1,
-          d2,
-        );
+        doMoveAndAction(gs.currentPlayer, d1 + d2, d1, d2, false);
       else advanceTurn(gs);
     } else advanceTurn(gs);
   };
@@ -1519,59 +1508,67 @@ export default function App() {
   };
 
   const buyProperty = () => {
-    if (!isMyTurn || !gameState?.modal) return;
-    const { spaceId, playerIdx } = gameState.modal;
-    const space = SPACES[spaceId];
-    const players = safePlayers(gameState).map((p) => ({ ...p }));
-    const props = safeProps(gameState);
-    const player = players[playerIdx];
-    const log = safeLog(gameState);
-    if (!player || player.money < space.price) {
-      pushState({ ...gameState, modal: null });
-      return;
-    }
-    players[playerIdx] = { ...player, money: player.money - space.price };
-    log.unshift(`${player.token} bought ${space.name} for $${space.price}`);
-    pushState({
-      ...gameState,
-      players,
-      properties: {
-        ...props,
-        [spaceId]: { owner: playerIdx, houses: 0, hotel: false },
-      },
-      modal: null,
-      log: log.slice(0, 25),
+    if (!isMyTurn) return;
+    pushState((current) => {
+      if (!current.modal) return;
+      const { spaceId, playerIdx } = current.modal;
+      const space = SPACES[spaceId];
+      const p = safePlayers(current);
+      const props = safeProps(current);
+      const player = p[playerIdx];
+      const log = safeLog(current);
+
+      if (!player || player.money < space.price) return { modal: null };
+
+      const nxtPlayers = p.map((pl, i) =>
+        i === playerIdx ? { ...pl, money: pl.money - space.price } : pl,
+      );
+      log.unshift(`${player.token} bought ${space.name} for $${space.price}`);
+
+      return {
+        players: nxtPlayers,
+        properties: {
+          ...props,
+          [spaceId]: { owner: playerIdx, houses: 0, hotel: false },
+        },
+        modal: null,
+        log: log.slice(0, 25),
+      };
     });
   };
 
   const buildHouse = (spaceId) => {
     if (!isMyTurn || processing) return;
-    const gs = gsRef.current;
-    const space = SPACES[spaceId];
-    if (!space) return;
-    const props = safeProps(gs);
-    const prop = props[spaceId];
-    if (!prop || prop.owner !== myIdx) return;
-    const players = safePlayers(gs).map((p) => ({ ...p }));
-    const player = players[myIdx];
-    const group = COLOR_GROUPS[space.color] || [];
-    if (!group.every((id) => props[id]?.owner === myIdx) || prop.hotel) return;
-    const cost = space.houseCost || 100;
-    if (player.money < cost) return;
-    players[myIdx] = { ...player, money: player.money - cost };
-    const log = safeLog(gs);
-    const newProp =
-      (prop.houses || 0) >= 4
-        ? (log.unshift(`${player.token} built 🏨 hotel on ${space.name}!`),
-          { ...prop, houses: 0, hotel: true })
-        : (log.unshift(`${player.token} built 🏠 house on ${space.name}!`),
-          { ...prop, houses: (prop.houses || 0) + 1 });
-    pushState({
-      ...gs,
-      players,
-      properties: { ...props, [spaceId]: newProp },
-      log: log.slice(0, 25),
-      modal: null,
+    pushState((current) => {
+      const space = SPACES[spaceId];
+      if (!space) return;
+      const props = safeProps(current);
+      const prop = props[spaceId];
+      if (!prop || prop.owner !== myIdx) return;
+
+      const pArr = safePlayers(current).map((p) => ({ ...p }));
+      const player = pArr[myIdx];
+      const group = COLOR_GROUPS[space.color] || [];
+      if (!group.every((id) => props[id]?.owner === myIdx) || prop.hotel) return;
+
+      const cost = space.houseCost || 100;
+      if (player.money < cost) return;
+
+      pArr[myIdx] = { ...player, money: player.money - cost };
+      const nxtLog = safeLog(current);
+      const newProp =
+        (prop.houses || 0) >= 4
+          ? (nxtLog.unshift(`${player.token} built 🏨 hotel on ${space.name}!`),
+            { ...prop, houses: 0, hotel: true })
+          : (nxtLog.unshift(`${player.token} built 🏠 house on ${space.name}!`),
+            { ...prop, houses: (prop.houses || 0) + 1 });
+
+      return {
+        players: pArr,
+        properties: { ...props, [spaceId]: newProp },
+        log: nxtLog.slice(0, 25),
+        modal: null,
+      };
     });
   };
 
@@ -1582,111 +1579,132 @@ export default function App() {
     eligibleTransferPropertyIds(props, (p) => p.owner === curIdx);
 
   const handleSteal = (targetSpaceId) => {
-    const gs = gsRef.current;
-    const props = safeProps(gs);
-    if (!getEligibleStealable(props, myIdx).includes(targetSpaceId)) return;
-    const log = safeLog(gs);
-    log.unshift(
-      `${safePlayers(gs)[myIdx]?.token} stole ${SPACES[targetSpaceId]?.name}!`,
-    );
-    pushState({
-      ...gs,
-      properties: {
-        ...props,
-        [targetSpaceId]: { ...props[targetSpaceId], owner: myIdx },
-      },
-      modal: null,
-      log: log.slice(0, 25),
+    pushState((current) => {
+      const props = safeProps(current);
+      if (!getEligibleStealable(props, myIdx).includes(targetSpaceId)) return;
+      const nxtLog = safeLog(current);
+      const players = safePlayers(current);
+      nxtLog.unshift(
+        `${players[myIdx]?.token} stole ${SPACES[targetSpaceId]?.name}!`,
+      );
+      return {
+        properties: {
+          ...props,
+          [targetSpaceId]: { ...props[targetSpaceId], owner: myIdx },
+        },
+        modal: null,
+        log: nxtLog.slice(0, 25),
+      };
     });
   };
 
   const handleSwap = (mySpaceId, theirSpaceId) => {
-    const gs = gsRef.current;
-    const props = safeProps(gs);
-    if (
-      !getEligibleSwapMine(props, myIdx).includes(mySpaceId) ||
-      !getEligibleStealable(props, myIdx).includes(theirSpaceId)
-    )
-      return;
-    const myProp = props[mySpaceId],
-      theirProp = props[theirSpaceId];
-    if (!myProp || !theirProp) return;
-    const log = safeLog(gs);
-    log.unshift(
-      `🔄 ${safePlayers(gs)[myIdx]?.token} swapped ${SPACES[mySpaceId]?.name} ↔ ${SPACES[theirSpaceId]?.name}!`,
-    );
-    pushState({
-      ...gs,
-      properties: {
-        ...props,
-        [mySpaceId]: { ...myProp, owner: theirProp.owner },
-        [theirSpaceId]: { ...theirProp, owner: myIdx },
-      },
-      modal: null,
-      log: log.slice(0, 25),
+    pushState((current) => {
+      const props = safeProps(current);
+      if (
+        !getEligibleSwapMine(props, myIdx).includes(mySpaceId) ||
+        !getEligibleStealable(props, myIdx).includes(theirSpaceId)
+      )
+        return;
+      const myProp = props[mySpaceId],
+        theirProp = props[theirSpaceId];
+      if (!myProp || !theirProp) return;
+      const nxtLog = safeLog(current);
+      const players = safePlayers(current);
+      nxtLog.unshift(
+        `🔄 ${players[myIdx]?.token} swapped ${SPACES[mySpaceId]?.name} ↔ ${SPACES[theirSpaceId]?.name}!`,
+      );
+      return {
+        properties: {
+          ...props,
+          [mySpaceId]: { ...myProp, owner: theirProp.owner },
+          [theirSpaceId]: { ...theirProp, owner: myIdx },
+        },
+        modal: null,
+        log: nxtLog.slice(0, 25),
+      };
     });
   };
 
   const handleRouletteSpin = () => {
-    const gs = gsRef.current;
-    if (!gs?.modal || gs.modal.type !== "roulette") return;
-    
-    // Phase 1: Start Spinning
-    if (!gs.modal.isSpinning && gs.modal.targetIdx === undefined) {
-      const targetIdx = Math.floor(Math.random() * ROULETTE_OUTCOMES.length);
-      pushState({ 
-        ...gs, 
-        modal: { ...gs.modal, isSpinning: true, targetIdx } 
-      });
-      return;
-    }
+    pushState((current) => {
+      if (!current.modal || current.modal.type !== "roulette") return;
 
-    // Phase 2: Animation finished, apply result
-    const curIdx = gs.currentPlayer;
-    const players = safePlayers(gs).map((p) => ({ ...p }));
-    const props = safeProps(gs);
-    const player = players[curIdx];
-    if (!player) return;
-    
-    const log = safeLog(gs);
-    const targetIdx = gs.modal.targetIdx;
-    const outcome = ROULETTE_OUTCOMES[targetIdx];
+      // Phase 1: Start Spinning
+      if (!current.modal.isSpinning && current.modal.targetIdx === undefined) {
+        const targetIdx = Math.floor(Math.random() * ROULETTE_OUTCOMES.length);
+        return {
+          modal: { ...current.modal, isSpinning: true, targetIdx },
+        };
+      }
 
-    if (outcome.type === "reward") {
-      players[curIdx] = { ...player, money: player.money + outcome.amount };
-      log.unshift(`🎡 ${player.token} spun Roulette: ${outcome.label}`);
-      const next = { ...gs, players, modal: { type: "notify", title: "Roulette Reward!", text: `You won $${outcome.amount}!` }, log: log.slice(0, 25) };
-      pushState(next).then(() => setTimeout(() => {
-        const gs2 = gsRef.current;
-        pushState({ ...gs2, modal: null }).then(() => advanceTurn({ ...gs2, modal: null }));
-      }, 1500));
-      return;
-    }
+      // Phase 2: Animation finished, apply result
+      const curIdx = current.currentPlayer;
+      const players = safePlayers(current).map((p) => ({ ...p }));
+      const props = safeProps(current);
+      const player = players[curIdx];
+      if (!player) return;
 
-    if (outcome.type === "none") {
-      log.unshift(`🎡 ${player.token} spun Roulette: Better Luck Next Time.`);
-      const next = { ...gs, modal: { type: "notify", title: "Better Luck Next Time", text: "No reward this spin." }, log: log.slice(0, 25) };
-      pushState(next).then(() => setTimeout(() => {
-        const gs2 = gsRef.current;
-        pushState({ ...gs2, modal: null }).then(() => advanceTurn({ ...gs2, modal: null }));
-      }, 1500));
-      return;
-    }
+      const nxtLog = safeLog(current);
+      const targetIdx = current.modal.targetIdx;
+      const outcome = ROULETTE_OUTCOMES[targetIdx];
 
-    const mine = getEligibleSwapMine(props, curIdx);
-    const theirs = getEligibleStealable(props, curIdx);
-    if (!theirs.length || (outcome.type === "swap" && !mine.length)) {
-      log.unshift(`🎡 ${player.token} landed on ${outcome.label} but has no targets.`);
-      const next = { ...gs, modal: { type: "notify", title: "Insufficient Properties", text: "No eligible properties to perform this action." }, log: log.slice(0, 25) };
-      pushState(next).then(() => setTimeout(() => {
-        const gs2 = gsRef.current;
-        pushState({ ...gs2, modal: null }).then(() => advanceTurn({ ...gs2, modal: null }));
-      }, 1500));
-      return;
-    }
+      if (outcome.type === "reward") {
+        players[curIdx] = { ...player, money: player.money + outcome.amount };
+        nxtLog.unshift(`🎡 ${player.token} spun Roulette: ${outcome.label}`);
+        return {
+          players,
+          modal: {
+            type: "notify",
+            title: "Roulette Reward!",
+            text: `You won $${outcome.amount}!`,
+          },
+          log: nxtLog.slice(0, 25),
+        };
+      }
 
-    log.unshift(`🎡 ${player.token} spun Roulette: ${outcome.label}`);
-    pushState({ ...gs, modal: { type: outcome.type, source: "roulette" }, log: log.slice(0, 25) });
+      if (outcome.type === "none") {
+        nxtLog.unshift(`🎡 ${player.token} spun Roulette: Better Luck Next Time.`);
+        return {
+          modal: {
+            type: "notify",
+            title: "Better Luck Next Time",
+            text: "No reward this spin.",
+          },
+          log: nxtLog.slice(0, 25),
+        };
+      }
+
+      const mine = getEligibleSwapMine(props, curIdx);
+      const theirs = getEligibleStealable(props, curIdx);
+      if (!theirs.length || (outcome.type === "swap" && !mine.length)) {
+        nxtLog.unshift(
+          `🎡 ${player.token} landed on ${outcome.label} but has no targets.`,
+        );
+        return {
+          modal: {
+            type: "notify",
+            title: "Insufficient Properties",
+            text: "No eligible properties to perform this action.",
+          },
+          log: nxtLog.slice(0, 25),
+        };
+      }
+
+      nxtLog.unshift(`🎡 ${player.token} spun Roulette: ${outcome.label}`);
+      return {
+        modal: { type: outcome.type, source: "roulette" },
+        log: nxtLog.slice(0, 25),
+      };
+    }).then(() => {
+      // After applying Phase 1 or 2 result, if it was a final result (notify), we set up the auto-dismiss and turn advance
+      const latest = gsRef.current;
+      if (latest?.modal?.type === "notify" && latest.modal.title.includes("Roulette")) {
+        setTimeout(() => {
+          advanceTurn();
+        }, 1500);
+      }
+    });
   };
 
   // ── Create / Join ──
@@ -1800,7 +1818,11 @@ export default function App() {
       aiConfigs[idx] = { difficulty: aiDifficulty, personality: aiPersonality };
     });
     const gs = freshGameState(count, settings, aiP, aiConfigs);
-    await set(ref(db, `games/${roomCode}/state`), gs);
+    const stateRef = ref(db, `games/${roomCode}/state`);
+    await runTransaction(stateRef, (current) => {
+      if (current && current.status === "playing" && current.version > 0) return;
+      return gs;
+    });
     setScreen("game");
   }, [settings, aiDifficulty, aiPersonality, roomCode]);
 
@@ -1968,7 +1990,7 @@ export default function App() {
   const maxByHeight = Math.max(280, windowHeight * (isPhone ? 0.95 : 0.85)); // Increased height allowance
   const boardPixelSize = Math.min(targetBoardWidth, maxByHeight);
   const adaptiveScale = boardPixelSize / baseBoardSize;
-  
+
   const boardScale = isPhone
     ? adaptiveScale
     : isTablet
@@ -2026,6 +2048,7 @@ export default function App() {
         db={db}
         update={update}
         ref={ref}
+        runTransaction={runTransaction}
       />
     );
   }

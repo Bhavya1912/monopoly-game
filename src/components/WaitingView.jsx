@@ -18,8 +18,8 @@ export default function WaitingView({
   setPlayerCount,
   startGame,
   db,
-  update,
   ref,
+  runTransaction,
 }) {
   const maxPlayers = gameState?.hostPlayerCount || playerCount;
   const totalJoined = lobbyPlayers.length + (settings.aiPlayers || []).length;
@@ -142,9 +142,15 @@ export default function WaitingView({
           onChange={async (newS) => {
             setSettings(newS);
             if (roomCode) {
-              await update(ref(db, `games/${roomCode}/state`), {
-                settings: newS,
-                hostPlayerCount: playerCount, // keep synced
+              const stateRef = ref(db, `games/${roomCode}/state`);
+              await runTransaction(stateRef, (current) => {
+                if (!current) return;
+                return {
+                  ...current,
+                  settings: newS,
+                  hostPlayerCount: playerCount,
+                  version: (current.version || 0) + 1,
+                };
               });
             }
           }}
