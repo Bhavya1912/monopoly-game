@@ -2,7 +2,7 @@
 .game-root {
     min-height: 100vh;
     background: transparent;
-    font-family: Georgia, serif;
+    font-family: var(--font-serif);
     display: flex;
     flex-direction: column;
     padding: 8px;
@@ -74,8 +74,8 @@
     height: 54px;
     border-radius: 999px;
     border: 0;
-    background: linear-gradient(135deg, #0ea5e9, #2563eb);
-    color: #fff;
+    background: linear-gradient(135deg, var(--blue-base), var(--blue-dark));
+    color: var(--bg-primary);
     font-size: 24px;
     font-weight: 900;
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
@@ -88,9 +88,9 @@
     right: 10px;
     bottom: 78px;
     height: min(52vh, 380px);
-    background: #1e293b;
-    border: 2px solid #334155;
-    border-radius: 14px;
+    background: var(--slate-800);
+    border: 2px solid var(--slate-600);
+    border-radius: var(--radius-md);
     display: flex;
     flex-direction: column;
     overflow: hidden;

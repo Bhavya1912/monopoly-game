@@ -1,3 +1,4 @@
+import PropTypes from "prop-types";
 import { useState, useEffect, useRef } from "react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,7 +37,13 @@ export default function TurnTimer({
 
   if (!limit) return null;
   const pct = remaining / limit;
-  const color = pct > 0.5 ? "#16a34a" : pct > 0.25 ? "#d97706" : "#dc2626";
+
+  let color = "var(--red-base)";
+  if (pct > 0.5) {
+    color = "var(--green-base)";
+  } else if (pct > 0.25) {
+    color = "var(--player-3)";
+  }
 
   return (
     <div className="turn-timer-container" style={{ "--pct": `${pct * 100}%`, "--bar-color": color }}>
@@ -51,3 +58,14 @@ export default function TurnTimer({
     </div>
   );
 }
+
+TurnTimer.propTypes = {
+  turnStartTime: PropTypes.number.isRequired,
+  limit: PropTypes.number,
+  onExpire: PropTypes.func.isRequired,
+  isMyTurn: PropTypes.bool.isRequired,
+};
+
+TurnTimer.defaultProps = {
+  limit: null,
+};

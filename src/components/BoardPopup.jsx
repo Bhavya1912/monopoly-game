@@ -26,7 +26,7 @@ function RouletteWheel({ outcomes, spinning, targetIndex, onComplete }) {
 
     const conicGradient = outcomes
         .map((_, i) =>
-            `${i % 2 === 0 ? "#15803d" : "#166534"} ${i * sliceAngle}deg ${(i + 1) * sliceAngle}deg`
+            `${i % 2 === 0 ? "var(--green-dark)" : "var(--green-base)"} ${i * sliceAngle}deg ${(i + 1) * sliceAngle}deg`
         )
         .join(", ");
 
@@ -78,7 +78,7 @@ function RouletteWheel({ outcomes, spinning, targetIndex, onComplete }) {
                                 textAnchor="middle"
                                 dominantBaseline="middle"
                                 transform={`rotate(${midDeg}, ${cx}, ${cy})`}
-                                style={{ fontSize: "4px", fontWeight: 800, fill: "#fff", textTransform: "uppercase", letterSpacing: "0.2px", textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}
+                                style={{ fontSize: "4px", fontWeight: 800, fill: "var(--bg-primary)", textTransform: "uppercase", letterSpacing: "0.2px", textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}
                             >
                                 {lines.map((line, li) => (
                                     <tspan key={`${line}-${li}`} x={cx} dy={li === 0 ? `${-(lines.length - 1) * 2.5}` : "5"}>
@@ -125,7 +125,7 @@ function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss, eligibleMine, 
             </div>
 
             <div className="modal-scrollable w-full" style={{ maxHeight: "350px" }}>
-                <div className="text-sm weight-bold margin-bottom-6 player-0-text" style={{ color: "#166534" }}>
+                <div className="text-sm weight-bold margin-bottom-6 player-0-text" style={{ color: "var(--green-dark)" }}>
                     Your property to give:
                 </div>
                 <div className="swap-grid margin-bottom-16">
@@ -137,7 +137,7 @@ function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss, eligibleMine, 
                                 key={id}
                                 onClick={() => setMyPick(+id)}
                                 className={`swap-card ${myPick === +id ? "selected" : ""}`}
-                                style={{ "--card-color": s.color || "#888" }}
+                                style={{ "--card-color": s.color || "var(--slate-400)" }}
                             >
                                 <div className="card-color-top" />
                                 <div className="card-name-tiny">{s.name}</div>
@@ -147,7 +147,7 @@ function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss, eligibleMine, 
                     {myProps.length === 0 && <div className="text-xs text-dim italic">No properties available</div>}
                 </div>
 
-                <div className="text-sm weight-bold margin-bottom-6 player-1-text" style={{ color: "#1e40af" }}>
+                <div className="text-sm weight-bold margin-bottom-6 player-1-text" style={{ color: "var(--blue-dark)" }}>
                     Property to receive:
                 </div>
                 <div className="swap-grid">
@@ -160,7 +160,7 @@ function SwapPanel({ props, myIdx, rawPlayers, onSwap, onDismiss, eligibleMine, 
                                 onClick={() => setTheirPick(+id)}
                                 className={`swap-card ${theirPick === +id ? "selected" : ""}`}
                                 style={{
-                                    "--card-color": s.color || "#888",
+                                    "--card-color": s.color || "var(--slate-400)",
                                     "--owner-color": PLAYER_COLORS[p.owner],
                                 }}
                             >
@@ -412,13 +412,13 @@ function StealContent({ modal, props, rawPlayers, myIdx, eligibleStealTargets, o
                         if (!p || p.owner === myIdx || !eligibleStealTargets.includes(+id)) return null;
                         const space = SPACES[+id];
                         if (!space) return null;
-                        const ownerColor = PLAYER_COLORS[p.owner] || "#888";
+                        const ownerColor = PLAYER_COLORS[p.owner] || "var(--slate-400)";
                         return (
                             <button
                                 key={id}
                                 onClick={() => onSteal(+id)}
                                 className="swap-card"
-                                style={{ "--card-color": space.color || "#888", "--owner-color": ownerColor }}
+                                style={{ "--card-color": space.color || "var(--slate-400)", "--owner-color": ownerColor }}
                             >
                                 <div className="card-color-top" />
                                 <div className="card-name-tiny">{space.name}</div>

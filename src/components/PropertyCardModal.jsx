@@ -299,7 +299,12 @@ export default function PropertyCardModal({
   const isColorProp = space.type === "property";
   const isBuyable = isColorProp || isRailroad || isUtility;
 
-  const headerLight = ["#87CEEB", "#fef9c3", "#ffedd5", "#ffffff"].includes(space.color);
+  const headerLight = [
+    "var(--prop-light-blue)",
+    "var(--bg-jail)",
+    "var(--bg-chance)",
+    "var(--bg-primary)",
+  ].includes(space.color);
 
   // Extract labels
   let deedTypeLabel = "";
@@ -327,7 +332,7 @@ export default function PropertyCardModal({
       onClick={handleBackdropEvent}
       onKeyDown={handleBackdropEvent}
       aria-label="Close property details"
-      style={{ "--prop-color": space.color || "#1a1a1a" }}
+      style={{ "--prop-color": space.color || "var(--slate-900)" }}
     >
       <div
         className="prop-card"

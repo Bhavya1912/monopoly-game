@@ -1,5 +1,74 @@
 :root {
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  /* Fonts */
+  --font-main: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Brand Colors (Greens) */
+  /* --- NEUTRALS (SLATE) --- */
+  --slate-50:  #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-400: #94a3b8;
+  --slate-600: #475569;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+
+  /* --- CORE PALETTE (LIGHT | BASE | DARK) --- */
+  --blue-soft:   #eff6ff;
+  --blue-base:   #2563eb;
+  --blue-dark:   #1e3a8a;
+
+  --green-soft:  #f0fdf4;
+  --green-base:  #16a34a;
+  --green-dark:  #14532d;
+
+  --red-soft:    #fef2f2;
+  --red-base:    #dc2626;
+  --red-dark:    #7f1d1d;
+
+  --gold-soft:   #fffbeb;
+  --gold-base:   #facc15;
+  --gold-dark:   #854d0e;
+
+  /* --- PROPERTY TOKENS (UNIFIED) --- */
+  --prop-brown:      #8B4513;
+  --prop-light-blue: #87CEEB;
+  --prop-pink:       #FF69B4;
+  --prop-orange:     #FFA500;
+  --prop-red:        var(--red-base);
+  --prop-yellow:     var(--gold-base);
+  --prop-green:      var(--green-base);
+  --prop-dark-blue:  var(--blue-dark);
+
+  /* --- PLAYER IDENTITY --- */
+  --player-0: var(--blue-base);
+  --player-1: var(--red-base);
+  --player-2: var(--green-base);
+  --player-3: var(--gold-base);
+
+  /* Surface / UI Tokens */
+  --bg-primary: #fff;
+  --bg-glass: rgba(20, 83, 45, 0.16);
+  --card-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  --radius-xl: 24px;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  /* Board Specific Tokens */
+  --board-bg: #fbf8e9;
+  --board-grid: #111;
+  --board-border: #222;
+  --board-cell-bg: #fff;
+  --board-select: var(--gold-base);
+  --bg-go: var(--green-soft);
+  --bg-jail: #fef9c3;
+  --bg-freeparking: var(--green-soft);
+  --bg-chance: #ffedd5;
+  --bg-community: var(--blue-soft);
+  --bg-tax: #fce7f3;
+  --bg-roulette: var(--red-soft);
+
+  font-family: var(--font-main);
   line-height: 1.4;
   font-weight: 400;
   font-synthesis: none;
@@ -18,9 +87,9 @@ html {
   width: 100%;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 15% 20%, rgba(34, 197, 94, 0.16), transparent 44%),
+    radial-gradient(circle at 15% 20%, var(--bg-glass), transparent 44%),
     radial-gradient(circle at 85% 0%, rgba(251, 191, 36, 0.14), transparent 38%),
-    linear-gradient(180deg, #14532d 0%, #0f3f24 60%, #0b2f1b 100%);
+    linear-gradient(180deg, var(--green-dark) 0%, #0f3f24 60%, #0b2f1b 100%);
   background-attachment: fixed;
 }
 
@@ -34,5 +103,4 @@ body,
 
 body {
   min-width: 320px;
-  zoom: 0.9;
 }

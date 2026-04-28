@@ -1,8 +1,8 @@
-import React from "react";
+import PropTypes from "prop-types";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import GameLog from "./GameLog";
 import ChatBox from "./ChatBox";
-import { SPACES, PLAYER_COLORS, COLOR_GROUPS, COLOR_LABELS } from "../constants";
+import { SPACES, PLAYER_COLORS, COLOR_GROUPS } from "../constants";
 
 export default function SidePanelView({
   me,
@@ -127,7 +127,7 @@ export default function SidePanelView({
                 const hasMonopoly =
                   space.type === "property" &&
                   group.every((sid) => props[sid]?.owner === myIdx);
-                const playerOnThisProp = me && me.position === +id;
+                const playerOnThisProp = me?.position === +id;
                 return (
                   <div
                     key={id}
@@ -138,11 +138,8 @@ export default function SidePanelView({
                     <span className="flex-1 ellipsis">{space.name}</span>
                     {hasMonopoly && <span className="mono-badge weight-bold">MONO</span>}
                     <span>
-                      {prop.hotel
-                        ? "🏨"
-                        : prop.houses > 0
-                          ? "🏠".repeat(prop.houses)
-                          : ""}
+                      {prop.hotel && "🏨"}
+                      {!prop.hotel && prop.houses > 0 && "🏠".repeat(prop.houses)}
                     </span>
                     {hasMonopoly && !prop.hotel && isMyTurn && playerOnThisProp && (
                       <button
@@ -268,7 +265,7 @@ export default function SidePanelView({
               onChange={(e) =>
                 setAudioSettings((s) => ({ ...s, muted: e.target.checked }))
               }
-            />
+            />{" "}
             Mute all
           </label>
         </div>
@@ -283,7 +280,7 @@ export default function SidePanelView({
               if (!prop) return null;
               const space = SPACES[+id];
               if (!space) return null;
-              const ownerColor = PLAYER_COLORS[prop.owner] || "#888";
+              const ownerColor = PLAYER_COLORS[prop.owner] || "var(--slate-400)";
               return (
                 <div
                   key={id}
@@ -325,3 +322,68 @@ export default function SidePanelView({
     </div>
   );
 }
+
+SidePanelView.propTypes = {
+  me: PropTypes.shape({
+    token: PropTypes.string,
+    money: PropTypes.number,
+    bankrupt: PropTypes.bool,
+    jailFreeCards: PropTypes.number,
+    doubleRentTurns: PropTypes.number,
+    rentImmuneTurns: PropTypes.number,
+    frozenTurns: PropTypes.number,
+    inJail: PropTypes.bool,
+    position: PropTypes.number,
+  }),
+  myIdx: PropTypes.number,
+  isMyTurn: PropTypes.bool.isRequired,
+  gameState: PropTypes.shape({
+    rolled: PropTypes.bool,
+  }).isRequired,
+  processing: PropTypes.bool.isRequired,
+  sellToPay: PropTypes.object,
+  handleRoll: PropTypes.func.isRequired,
+  endTurn: PropTypes.func.isRequired,
+  rawPlayers: PropTypes.array.isRequired,
+  wealthSeries: PropTypes.array.isRequired,
+  wealthMode: PropTypes.string.isRequired,
+  setWealthMode: PropTypes.func.isRequired,
+  chartMin: PropTypes.number.isRequired,
+  chartMax: PropTypes.number.isRequired,
+  myGroupChances: PropTypes.array.isRequired,
+  playerProbabilities: PropTypes.array.isRequired,
+  riskByPlayer: PropTypes.array.isRequired,
+  colorSetInsights: PropTypes.array.isRequired,
+  dangerousZones: PropTypes.array.isRequired,
+  myProps: PropTypes.array.isRequired,
+  props: PropTypes.object.isRequired,
+  buildHouse: PropTypes.func.isRequired,
+  isLocalGame: PropTypes.bool.isRequired,
+  tradeDraft: PropTypes.shape({
+    offerPropertyId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    requestPropertyId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    requestCash: PropTypes.number,
+  }).isRequired,
+  setTradeDraft: PropTypes.func.isRequired,
+  submitTradeOffer: PropTypes.func.isRequired,
+  audioSettings: PropTypes.shape({
+    masterVolume: PropTypes.number,
+    musicVolume: PropTypes.number,
+    effectsVolume: PropTypes.number,
+    muted: PropTypes.bool,
+  }).isRequired,
+  setAudioSettings: PropTypes.func.isRequired,
+  logArr: PropTypes.array.isRequired,
+  displayedChat: PropTypes.array.isRequired,
+  chatInput: PropTypes.string.isRequired,
+  setChatInput: PropTypes.func.isRequired,
+  sendChat: PropTypes.func.isRequired,
+  chatEndRef: PropTypes.object.isRequired,
+  isPhone: PropTypes.bool.isRequired,
+};
+
+SidePanelView.defaultProps = {
+  me: null,
+  myIdx: null,
+  sellToPay: null,
+};

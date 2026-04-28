@@ -106,7 +106,7 @@ export default function AnalyticsDashboard({
                 cx={x}
                 cy="12"
                 r="3"
-                fill="#f59e0b"
+                fill="var(--gold-base)"
               />
             );
           })}

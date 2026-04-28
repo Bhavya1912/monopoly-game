@@ -409,15 +409,40 @@ export default function App() {
   };
 
   const buildHouse = (spaceId) => {
+    if (!isMyTurn || gameState.rolling) return;
     pushState((gs) => {
       const cur = { ...gs };
-      const props = safeProps(cur);
-      const player = cur.players[cur.currentPlayer];
+      const props = { ...safeProps(cur) };
+      const players = [...safePlayers(cur)];
+      const playerIdx = cur.currentPlayer;
+      const player = { ...players[playerIdx] };
       const space = SPACES[spaceId];
+      
+      if (player.position !== spaceId) return cur;
       if (!space || player.money < space.houseCost) return cur;
 
-      const prop = props[spaceId];
-      if (!prop || prop.owner !== cur.currentPlayer) return cur;
+      const prop = { ...(props[spaceId] || { owner: playerIdx, houses: 0, hotel: false }) };
+      if (prop.owner !== playerIdx) return cur;
+
+      // Monopoly check
+      const group = COLOR_GROUPS[space.color] || [];
+      const hasMonopoly = group.length > 0 && group.every(id => props[id]?.owner === playerIdx);
+      if (!hasMonopoly) return cur;
+
+      // Mortgage check: cannot build if any property in group is mortgaged
+      if (group.some(id => props[id]?.mortgaged)) return cur;
+
+      // Even building check
+      const currentLevel = prop.hotel ? 5 : (prop.houses || 0);
+      if (currentLevel >= 5) return cur; // Already has hotel
+
+      const levels = group.map(id => {
+        const p = props[id];
+        if (!p) return 0;
+        return p.hotel ? 5 : (p.houses || 0);
+      });
+      const minLevel = Math.min(...levels);
+      if (currentLevel > minLevel) return cur; // Must build evenly
 
       player.money -= space.houseCost;
       if (prop.houses < 4) {
@@ -426,9 +451,15 @@ export default function App() {
         prop.houses = 0;
         prop.hotel = true;
       }
-      const log = safeLog(cur);
-      log.unshift(`${player.token} built on ${space.name}! 🏠`);
-      cur.properties = { ...props, [spaceId]: { ...prop } };
+
+      players[playerIdx] = player;
+      props[spaceId] = prop;
+
+      const log = [...safeLog(cur)];
+      log.unshift(`${player.token} built on ${space.name}! ${prop.hotel ? "🏨" : "🏠"}`);
+      
+      cur.players = players;
+      cur.properties = props;
       cur.log = log.slice(0, 25);
       return cur;
     });
@@ -602,21 +633,30 @@ export default function App() {
 
   const buyProperty = (spaceId) => {
     if (!isMyTurn || gameState.rolling) return;
+    const playerAtTurn = rawPlayers[myIdx];
+    if (playerAtTurn?.position !== spaceId) return;
     setSelectedSpace(null);
     pushState((current) => {
       const gs = { ...current };
-      const player = gs.players[gs.currentPlayer];
+      const players = [...safePlayers(gs)];
+      const playerIdx = gs.currentPlayer;
+      const player = { ...players[playerIdx] };
       const space = SPACES[spaceId];
       if (!space || player.money < space.price) return gs;
 
-      const props = safeProps(gs);
+      const props = { ...safeProps(gs) };
       if (props[spaceId]?.owner !== undefined) return gs; // already bought
 
-      gs.players[gs.currentPlayer].money -= space.price;
-      gs.properties = { ...props, [spaceId]: { owner: gs.currentPlayer, houses: 0, hotel: false } };
-
-      const log = safeLog(gs);
+      player.money -= space.price;
+      players[playerIdx] = player;
+      
+      props[spaceId] = { owner: playerIdx, houses: 0, hotel: false };
+      
+      const log = [...safeLog(gs)];
       log.unshift(`${player.token} bought ${space.name} for $${space.price}`);
+      
+      gs.players = players;
+      gs.properties = props;
       gs.log = log.slice(0, 25);
       gs.modal = null;
       return gs;
@@ -760,7 +800,18 @@ export default function App() {
         />
 
         {selectedSpace !== null && (
-          <PropertyCardModal spaceId={selectedSpace} prop={props[selectedSpace]} players={rawPlayers} myIdx={myIdx} isMyTurn={isMyTurn} allProps={props} playerIsOnSpace={rawPlayers[myIdx]?.position === selectedSpace} onClose={() => setSelectedSpace(null)} onBuild={null} onBuy={() => buyProperty(selectedSpace)} />
+          <PropertyCardModal 
+            spaceId={selectedSpace} 
+            prop={props[selectedSpace]} 
+            players={rawPlayers} 
+            myIdx={myIdx} 
+            isMyTurn={isMyTurn} 
+            allProps={props} 
+            playerIsOnSpace={rawPlayers[myIdx]?.position === selectedSpace} 
+            onClose={() => setSelectedSpace(null)} 
+            onBuild={buildHouse} 
+            onBuy={(rawPlayers[myIdx]?.position === selectedSpace && isMyTurn) ? () => buyProperty(selectedSpace) : null} 
+          />
         )}
       </div>
     </div>
