@@ -32,6 +32,7 @@ import TurnBanner from "./components/TurnBanner";
 import BoardView from "./components/BoardView";
 import SidePanelView from "./components/SidePanelView";
 import PropertyCardModal from "./components/PropertyCardModal";
+import ChatBox from "./components/ChatBox";
 import { playSound } from "./soundManager";
 
 // ─── Hooks & Engine ──────────────────────────────────────────────────────────
@@ -270,7 +271,10 @@ export default function App() {
   // ── Effects ──
   useEffect(() => {
     const handleResize = () => {
-      setWindowWidth(window.innerWidth);
+      setWindowWidth((prev) => {
+        if (Math.abs(prev - window.innerWidth) > 20) return window.innerWidth;
+        return prev;
+      });
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -812,6 +816,37 @@ export default function App() {
             onBuild={buildHouse} 
             onBuy={(rawPlayers[myIdx]?.position === selectedSpace && isMyTurn) ? () => buyProperty(selectedSpace) : null} 
           />
+        )}
+
+        {isPhone && (
+          <>
+            <button
+              className="mobile-chat-fab"
+              onClick={() => setMobileChatOpen(!mobileChatOpen)}
+              aria-label="Toggle Chat"
+            >
+              💬
+            </button>
+            {mobileChatOpen && (
+              <div className="mobile-chat-overlay">
+                <div className="mobile-chat-header row-between">
+                  <h3>Chat</h3>
+                  <button className="btn-close" onClick={() => setMobileChatOpen(false)}>✕</button>
+                </div>
+                <div className="mobile-chat-body">
+                  <ChatBox
+                    isLocalGame={isLocalGame}
+                    displayedChat={isLocalGame ? aiChatMessages : chatMessages}
+                    myIdx={myIdx}
+                    chatInput={chatInput}
+                    setChatInput={setChatInput}
+                    sendChat={() => sendChat(chatInput, setChatInput)}
+                    chatEndRef={chatEndRef}
+                  />
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

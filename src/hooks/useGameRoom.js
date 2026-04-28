@@ -99,10 +99,10 @@ export function useGameRoom() {
               : nextStateOrUpdater;
           const safe = {
             ...next,
-            properties: next.properties && typeof next.properties === "object" ? next.properties : {},
-            log: Array.isArray(next.log) ? next.log : [],
-            players: Array.isArray(next.players) ? next.players : [],
-            rolling: next.rolling ?? false,
+            properties: next.properties && typeof next.properties === "object" ? next.properties : (prev.properties || {}),
+            log: Array.isArray(next.log) ? next.log : (prev.log || []),
+            players: Array.isArray(next.players) ? next.players : (prev.players || []),
+            rolling: next.rolling ?? prev.rolling ?? false,
           };
           const nextDice = next.dice || prev?.dice || [1, 1];
           const newVersion = (prev?.version ?? 0) + 1;
@@ -130,10 +130,10 @@ export function useGameRoom() {
 
           const safe = {
             ...next,
-            properties: next.properties && typeof next.properties === "object" ? next.properties : {},
-            log: Array.isArray(next.log) ? next.log : [],
-            players: Array.isArray(next.players) ? next.players : [],
-            rolling: next.rolling ?? false,
+            properties: next.properties && typeof next.properties === "object" ? next.properties : (current.properties || {}),
+            log: Array.isArray(next.log) ? next.log : (current.log || []),
+            players: Array.isArray(next.players) ? next.players : (current.players || []),
+            rolling: next.rolling ?? current.rolling ?? false,
           };
 
           const nextDice = next.dice || current.dice || [1, 1];

@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 import GameTimer from "./GameTimer";
 
 export default function GameHeader({
@@ -43,11 +44,9 @@ export default function GameHeader({
           </button>
         </span>
         <span className="mode-badge">
-          {gs_s.gameMode === "classic"
-            ? "⚔️ Classic"
-            : gs_s.gameMode === "timed"
-              ? `⏱ ${gs_s.timedMinutes}min`
-              : `🎯 $${(gs_s.targetAmount || 10000).toLocaleString()}`}
+          {gs_s.gameMode === "classic" && "⚔️ Classic"}
+          {gs_s.gameMode === "timed" && `⏱ ${gs_s.timedMinutes}min`}
+          {gs_s.gameMode === "target" && `🎯 $${(gs_s.targetAmount || 10000).toLocaleString()}`}
         </span>
         <button
           onClick={() =>
@@ -62,17 +61,20 @@ export default function GameHeader({
 
       {/* Player chips */}
       <div className="flex-gap-8 align-center flex-wrap">
-        {rawPlayers.map((p, i) =>
-          p ? (
+        {rawPlayers.map((p, i) => {
+          if (!p) return null;
+          
+          let statusClass = "";
+          if (gameState.currentPlayer === i) {
+            statusClass = "active-turn";
+          } else if (i === myIdx) {
+            statusClass = "current-player";
+          }
+
+          return (
             <div
-              key={i}
-              className={`player-chip ${
-                gameState.currentPlayer === i
-                  ? "active-turn"
-                  : i === myIdx
-                    ? "current-player"
-                    : ""
-              } ${p.bankrupt ? "bankrupt" : ""}`}
+              key={p.token || i}
+              className={`player-chip ${statusClass} ${p.bankrupt ? "bankrupt" : ""}`}
             >
               <span className="text-md">{p.token}</span>
               <div className="flex-column">
@@ -95,8 +97,8 @@ export default function GameHeader({
               )}
               {p.bankrupt && <span className="bankrupt-icon">💸</span>}
             </div>
-          ) : null,
-        )}
+          );
+        })}
         {gs_s.gameMode === "timed" && gameState.gameStartTime && (
           <GameTimer
             gameStartTime={gameState.gameStartTime}
@@ -108,9 +110,36 @@ export default function GameHeader({
           />
         )}
       </div>
-      <button className="btn btn-danger text-xs" onClick={resetToLobby}>
+      <button 
+        className="btn btn-danger text-xs" 
+        onClick={() => {
+          if (globalThis.confirm("Are you sure you want to leave the game? All your progress will be lost.")) {
+            resetToLobby();
+          }
+        }}
+      >
         Leave
       </button>
     </div>
   );
 }
+
+GameHeader.propTypes = {
+  roomCode: PropTypes.string,
+  codeCopied: PropTypes.bool,
+  setCodeCopied: PropTypes.func.isRequired,
+  gs_s: PropTypes.shape({
+    gameMode: PropTypes.string,
+    timedMinutes: PropTypes.number,
+    targetAmount: PropTypes.number,
+  }).isRequired,
+  gameState: PropTypes.shape({
+    currentPlayer: PropTypes.number,
+    gameStartTime: PropTypes.number,
+  }).isRequired,
+  rawPlayers: PropTypes.array.isRequired,
+  myIdx: PropTypes.number,
+  resetToLobby: PropTypes.func.isRequired,
+  layoutFocus: PropTypes.string,
+  setLayoutFocus: PropTypes.func.isRequired,
+};
