@@ -516,7 +516,14 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const COLOR_LABELS = {
-  "#0000FF": "Dark Blue",
+  "#8B4513": "Brown",
+  "#87CEEB": "Light Blue",
+  "#FF69B4": "Pink",
+  "#FFA500": "Orange",
+  "#FF0000": "Red",
+  "#DAA520": "Yellow",
+  "#228B22": "Green",
+  "#00008B": "Dark Blue",
 };
 
 export const DIFF_INFO = {

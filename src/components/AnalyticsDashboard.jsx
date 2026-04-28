@@ -1,19 +1,27 @@
 import React from "react";
+import PropTypes from "prop-types";
 import { PLAYER_COLORS, COLOR_LABELS, SPACES } from "../constants";
 
 export default function AnalyticsDashboard({
-  rawPlayers,
-  wealthSeries,
-  wealthMode,
-  setWealthMode,
-  chartMin,
-  chartMax,
-  myGroupChances,
-  playerProbabilities,
-  riskByPlayer,
-  colorSetInsights,
-  dangerousZones,
+  rawPlayers = [],
+  wealthSeries = [],
+  wealthMode = "net",
+  setWealthMode = () => { },
+  chartMin = 0,
+  chartMax = 10000,
+  myGroupChances = [],
+  playerProbabilities = [],
+  riskByPlayer = [],
+  colorSetInsights = [],
+  dangerousZones = [],
 }) {
+  const getRiskClass = (risk) => {
+    if (risk < 30) return "low";
+    if (risk < 55) return "med";
+    if (risk < 75) return "high";
+    return "crit";
+  };
+
   return (
     <div className="analytics-panel">
       <div className="analytics-title">📊 STRATEGY DASHBOARD (LIVE)</div>
@@ -54,7 +62,7 @@ export default function AnalyticsDashboard({
               })
               .join(" ");
             return (
-              <g key={pid}>
+              <g key={`player-line-${p.id ?? pid}`}>
                 <polyline
                   points={pts}
                   fill="none"
@@ -75,7 +83,7 @@ export default function AnalyticsDashboard({
                     ((value - chartMin) / (chartMax - chartMin || 1)) * 85;
                   return (
                     <circle
-                      key={`pt-${idx}`}
+                      key={`pt-${pid}-${idx}`}
                       cx={x}
                       cy={y}
                       r="2"
@@ -94,7 +102,7 @@ export default function AnalyticsDashboard({
                 : 10 + idx * (280 / (wealthSeries.length - 1));
             return (
               <circle
-                key={`ev-${idx}`}
+                key={`ev-${pt.timestamp || pt.id || idx}`}
                 cx={x}
                 cy="12"
                 r="3"
@@ -134,10 +142,9 @@ export default function AnalyticsDashboard({
       <div className="analytics-card">
         <div className="risk-title">Bankruptcy Risk</div>
         {riskByPlayer.map((r) => {
-          const riskClass =
-            r.risk < 30 ? "low" : r.risk < 55 ? "med" : r.risk < 75 ? "high" : "crit";
+          const riskClass = getRiskClass(r.risk);
           return (
-            <div key={`risk-${r.pid}`} className="risk-row">
+            <div key={`risk-p${r.pid}`} className="risk-row">
               <span className={`risk-player player-${r.pid}-text`}>P{r.pid + 1}</span>
               <div className="flex-1 meter-track">
                 <div
@@ -161,8 +168,8 @@ export default function AnalyticsDashboard({
           </div>
         ) : (
           <div className="insight-list">
-            {colorSetInsights.slice(0, 2).map((set, idx) => (
-              <div key={`set-${idx}`} className="insight-item">
+            {colorSetInsights.slice(0, 2).map((set) => (
+              <div key={`set-insight-${set.owner}-${set.color}`} className="insight-item">
                 <strong className={`weight-bold player-${set.owner}-text`}>P{set.owner + 1}</strong>{" "}
                 controls <strong className="weight-bold">{COLOR_LABELS[set.color] || "Color"}</strong> •
                 Potential ${set.incomePotential}/round • Upgrades {set.upgrades}
@@ -174,14 +181,28 @@ export default function AnalyticsDashboard({
           Danger zones:{" "}
           {dangerousZones.length
             ? dangerousZones
-                .map(
-                  (z) =>
-                    `${SPACES[z.id]?.name} (P${z.owner + 1} • $${z.rent})`,
-                )
-                .join(" • ")
+              .map(
+                (z) =>
+                  `${SPACES[z.id]?.name} (P${z.owner + 1} • $${z.rent})`,
+              )
+              .join(" • ")
             : "none yet"}
         </div>
       </div>
     </div>
   );
 }
+
+AnalyticsDashboard.propTypes = {
+  rawPlayers: PropTypes.array,
+  wealthSeries: PropTypes.array,
+  wealthMode: PropTypes.string,
+  setWealthMode: PropTypes.func,
+  chartMin: PropTypes.number,
+  chartMax: PropTypes.number,
+  myGroupChances: PropTypes.array,
+  playerProbabilities: PropTypes.array,
+  riskByPlayer: PropTypes.array,
+  colorSetInsights: PropTypes.array,
+  dangerousZones: PropTypes.array,
+};

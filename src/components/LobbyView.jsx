@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 import { DIFF_INFO, PERS_INFO } from "../constants";
 
 export default function LobbyView({
@@ -77,13 +78,13 @@ export default function LobbyView({
                 <input
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === "Enter" && joinGame()}
+                  onKeyDown={(e) => e.key === "Enter" && joinGame(joinCode)}
                   placeholder="Enter room code"
                   maxLength={6}
                   className="input-code"
                 />
                 {error && <p className="error-text">{error}</p>}
-                <button className="btn btn-secondary btn-full" onClick={() => joinGame()}>
+                <button className="btn btn-secondary btn-full" onClick={() => joinGame(joinCode)}>
                   Join Game →
                 </button>
               </div>
@@ -139,7 +140,7 @@ export default function LobbyView({
               {/* Personality */}
               <div className="margin-bottom-20">
                 <div className="section-title">
-                  🎭 AI Play Style
+                  🎭 AI Play Style{" "}
                   <span className="text-light text-xs margin-left-6 font-normal">
                     (each AI gets a different style automatically)
                   </span>
@@ -180,3 +181,20 @@ export default function LobbyView({
     </div>
   );
 }
+
+LobbyView.propTypes = {
+  lobbyMode: PropTypes.string.isRequired,
+  setLobbyMode: PropTypes.func.isRequired,
+  playerCount: PropTypes.number.isRequired,
+  setPlayerCount: PropTypes.func.isRequired,
+  createGame: PropTypes.func.isRequired,
+  joinCode: PropTypes.string.isRequired,
+  setJoinCode: PropTypes.func.isRequired,
+  joinGame: PropTypes.func.isRequired,
+  error: PropTypes.string,
+  aiOpponentCount: PropTypes.number.isRequired,
+  setAiOpponentCount: PropTypes.func.isRequired,
+  aiDifficulty: PropTypes.string.isRequired,
+  setAiDifficulty: PropTypes.func.isRequired,
+  startAIGame: PropTypes.func.isRequired,
+};
