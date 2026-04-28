@@ -1,7 +1,7 @@
 # Code Review – Monopoly Game
 
 ## Scope & Context
-- **Date of Review:** Live Document (Last updated April 18, 2026)
+- **Date of Review:** Live Document (Last updated April 28, 2026)
 - **Review Objectives:** Assess architecture, multiplayer correctness, maintainability, Component UI, and gameplay depth.
 - **Repository coverage:** Core source files (`src/App.jsx`, `src/constants.js`, `src/ai.js`, `src/utils.js`), styling, and component files.
 - **Static checks evaluated:** `npm run lint`, `npm run build`.
@@ -12,22 +12,18 @@
 3. **Transactional State Management**: Core game logic uses Firebase transactions to ensure state consistency.
 4. **Deep AI Integration**: Local AI mode features advanced heuristics and a personality-driven advisor system.
 5. **Responsive Game Board**: The adaptive scaling system ensures the board remains playable across desktop, tablet, and mobile browsers.
+6. **Improved Modularity**: Core logic and networking have been successfully decoupled from the main view component.
 
 ## Key engineering findings (highest priority first)
 
-### 1) `App.jsx` "God Component" (Risk: Critical Complexity)
-- **Status:** **CRITICAL**. The file has grown to ~2370 lines (~84KB).
-- It currently manages: 
-  - Entire Firebase Realtime database synchronization.
-  - Core game rules logic (purchases, rent, bankruptcy, jail).
-  - AI turn triggers and Advisor logic.
-  - Complex UI state (popups, animations, screen routing).
-  - URL routing and deep-linking.
-- **Recommendation:**
-  - This is no longer "modularization"—it requires a structural split.
-  - **Action 1**: Extract the rules engine into a non-React `src/game/engine.js`.
-  - **Action 2**: Move Firebase sync and side-effects into a custom `src/hooks/useGameRoom.js`.
-  - **Action 3**: Decouple the AI routine into a dedicated `src/game/aiController.js`.
+### 1) `App.jsx` Refactoring (Risk: Low/Medium - Improved)
+- **Status:** **RESOLVED**. The file has been reduced from ~2370 lines to ~770 lines.
+- **Improvements**: 
+  - **Networking**: Firebase synchronization and session management moved to `src/hooks/useGameRoom.js`.
+  - **Game Rules**: Rent calculation, turn advancement, and space actions moved to `src/game/engine.js`.
+  - **AI Routine**: Decoupled AI decision triggers into `src/hooks/useAIController.js`.
+  - **Analytics**: Strategy and risk heuristics moved to `src/utils.js`.
+- **Remaining**: Further extraction of localized sub-components (e.g., specific game modals) can further simplify the render block.
 
 ### 2) Hardcoded Credentials (Risk: Security/Portability)
 - **Status:** **High Priority**. Firebase configuration is still hardcoded in `src/services/firebase.js`.
@@ -36,10 +32,10 @@
   - Add `.env.example` to the repo.
 
 ### 3) Missing Automated Test Coverage
-- **Status:** **High Priority**. With 2300+ lines of game logic, manual regression testing is becoming unfeasible.
+- **Status:** **High Priority**. With complex game logic and multiplayer state, manual regression testing is becoming unfeasible.
 - **Recommendation:**
   - Install Vitest.
-  - Priority targets: `src/utils.js` (rent calculation, market modifiers) and `src/ai.js` (decision scoring).
+  - Priority targets: `src/utils.js` (rent calculation, market modifiers) and `src/game/engine.js` (state transition correctness).
 
 ## Gameplay Improvements Roadmap
 
@@ -59,18 +55,18 @@
 
 ## Suggested rollout plan
 
-### Phase 1 (Scalability & Security)
-1. **Env Configuration**: Move Firebase keys to `.env`.
-2. **Structural Split**: Extract `useGameRoom.js` hook from `App.jsx`.
-3. **Core Rules Extraction**: Move `calcRent`, `doSpaceAction`, and `advanceTurn` to `engine.js`.
+### Phase 1 (Scalability & Security) - **IN PROGRESS**
+1. **Structural Split**: Extract `useGameRoom.js` and `engine.js` from `App.jsx`. ✅
+2. **AI Controller**: Decouple AI logic into a dedicated hook. ✅
+3. **Env Configuration**: Move Firebase keys to `.env`. (Pending)
 
 ### Phase 2 (Stability)
-1. **Testing Infrastructure**: Setup Vitest and achieve >50% coverage on `utils.js`.
+1. **Testing Infrastructure**: Setup Vitest and achieve >50% coverage on core logic.
 
 ### Phase 3 (Feature Depth)
 1. **Public Auctions**: Implement the bid/timer logic and UI.
 2. **Mission System**: Add secret cards and completion trackers.
 
 ## Validation run
-- `npm run lint` ✅
-- `npm run build` ✅
+- `npm run lint` ✅ (Passes with 0 errors)
+- `npm run build` ✅ (Passes successfully)
