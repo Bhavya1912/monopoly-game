@@ -36,7 +36,7 @@ export const calcRent = (gs, spaceId, prop, dice) => {
 
   const props = safeProps(gs);
   const p2 = props && typeof props === "object" ? props : {};
-  let rent = 0;
+  let rent;
 
   if (space.type === "railroad") {
     rent = getRailroadRent(space, prop, p2);

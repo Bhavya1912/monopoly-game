@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { startTransition, useState, useEffect, useRef } from "react";
 import { ref, runTransaction } from "firebase/database";
 import { db } from "./services/firebase";
 
@@ -42,6 +42,9 @@ import { useWealthTracker } from "./hooks/useWealthTracker";
 import * as Engine from "./game/engine";
 
 import "./game.css";
+
+const rollDie = () => Math.ceil(Math.random() * 6);
+const randomIndex = (length) => Math.floor(Math.random() * length);
 
 export default function App() {
   // ── Modular State & Logic ──
@@ -219,8 +222,8 @@ export default function App() {
     if (strat === "card") return handleUseJailCard();
 
     setProcessing(true);
-    const d1 = Math.ceil(Math.random() * 6);
-    const d2 = Math.ceil(Math.random() * 6);
+    const d1 = rollDie();
+    const d2 = rollDie();
     const isDouble = d1 === d2;
 
     pushState((gs) => {
@@ -271,6 +274,7 @@ export default function App() {
   // ── Effects ──
   useEffect(() => {
     const handleResize = () => {
+      if (window.innerWidth >= 600) setMobileChatOpen(false);
       setWindowWidth((prev) => {
         if (Math.abs(prev - window.innerWidth) > 20) return window.innerWidth;
         return prev;
@@ -279,10 +283,6 @@ export default function App() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  useEffect(() => {
-    if (windowWidth >= 600 && mobileChatOpen) setMobileChatOpen(false);
-  }, [windowWidth, mobileChatOpen]);
 
   useEffect(() => {
     if (!latestLogEntry) return;
@@ -309,40 +309,16 @@ export default function App() {
   }, [isLocalGame, aiChatMessages]);
 
   useEffect(() => {
-    if (gameState?.settings && !isHost) setSettings(gameState.settings);
+    if (gameState?.settings && !isHost) {
+      startTransition(() => setSettings(gameState.settings));
+    }
   }, [gameState?.settings, isHost]);
 
   useEffect(() => {
-    if (gameState?.modal) setSelectedSpace(null);
-  }, [gameState?.modal]);
-
-  // Position animation logic
-  useEffect(() => {
-    if (!gameState) return;
-    const players = safePlayers(gameState);
-    if (!players.length) return;
-    if (prevPositionsRef.current === null) {
-      const seed = {};
-      players.forEach((p) => { if (p) seed[p.id] = p.position; });
-      prevPositionsRef.current = seed;
-      return;
+    if (gameState?.modal) {
+      startTransition(() => setSelectedSpace(null));
     }
-    players.forEach((p) => {
-      if (!p || p.bankrupt) return;
-      const prev = prevPositionsRef.current[p.id];
-      if (prev !== undefined && prev !== p.position) {
-        let steps = p.position - prev;
-        if (steps < 0 && steps >= -12) {
-          // Backward movement (like "Go back 3 spaces")
-        } else if (steps < 0) {
-          // Wrapped around the board forwards
-          steps = 40 - prev + p.position;
-        }
-        prevPositionsRef.current[p.id] = p.position;
-        animateSteps(p.id, prev, steps);
-      }
-    });
-  }, [playerPositionsKey, gameState?.status, gameState]);
+  }, [gameState?.modal]);
 
   const animateSteps = (playerId, from, steps) => {
     const STEP_MS = 250;
@@ -374,6 +350,34 @@ export default function App() {
     };
     setTimeout(tick, 100);
   };
+
+  // Position animation logic
+  useEffect(() => {
+    if (!gameState) return;
+    const players = safePlayers(gameState);
+    if (!players.length) return;
+    if (prevPositionsRef.current === null) {
+      const seed = {};
+      players.forEach((p) => { if (p) seed[p.id] = p.position; });
+      prevPositionsRef.current = seed;
+      return;
+    }
+    players.forEach((p) => {
+      if (!p || p.bankrupt) return;
+      const prev = prevPositionsRef.current[p.id];
+      if (prev !== undefined && prev !== p.position) {
+        let steps = p.position - prev;
+        if (steps < 0 && steps >= -12) {
+          // Backward movement (like "Go back 3 spaces")
+        } else if (steps < 0) {
+          // Wrapped around the board forwards
+          steps = 40 - prev + p.position;
+        }
+        prevPositionsRef.current[p.id] = p.position;
+        animateSteps(p.id, prev, steps);
+      }
+    });
+  }, [playerPositionsKey, gameState?.status, gameState]);
 
   // ── Game Handlers ──
   const handleSteal = (propId) => {
@@ -617,7 +621,7 @@ export default function App() {
     const outcomes = modal.options;
     if (!outcomes?.length) return;
 
-    const targetIdx = Math.floor(Math.random() * outcomes.length);
+    const targetIdx = randomIndex(outcomes.length);
 
     setProcessing(true);
     pushState((gs) => ({
