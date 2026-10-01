@@ -81,6 +81,7 @@ The game will be available at `http://localhost:5173`.
 - `npm run build`: Bundles the app for production.
 - `npm run preview`: Previews the local production build.
 - `npm run lint`: Runs ESLint for code formatting and quality checks.
+- `npm run reinstall`: Deletes `node_modules` **and** `package-lock.json`, then performs a fresh `npm install` so all dependencies are resolved from scratch (use when dependencies break or need a clean slate).
 
 ---
 

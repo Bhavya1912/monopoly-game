@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "reinstall": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const p of ['node_modules', 'package-lock.json']) rmSync(p, { recursive: true, force: true });\" && npm install"
   },
   "dependencies": {
     "firebase": "12.9.0",
