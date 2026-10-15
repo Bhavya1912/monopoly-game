@@ -20,6 +20,7 @@ import {
   getDangerousZones,
   calculateBankruptcyRisk,
   calculateMonopolyChance,
+  eligibleTransferPropertyIds,
 } from "./utils";
 
 // ─── Components ──────────────────────────────────────────────────────────────
@@ -117,6 +118,15 @@ export default function App() {
   // ── Derived Strategy Data (Moved to top to follow Rules of Hooks) ──
   const rawPlayers = safePlayers(gameState);
   const props = safeProps(gameState);
+  const activePlayerIdx = gameState?.currentPlayer;
+  const eligibleStealTargets = React.useMemo(
+    () => eligibleTransferPropertyIds(props, (prop) => prop.owner !== activePlayerIdx),
+    [props, activePlayerIdx],
+  );
+  const eligibleSwapMine = React.useMemo(
+    () => eligibleTransferPropertyIds(props, (prop) => prop.owner === activePlayerIdx),
+    [props, activePlayerIdx],
+  );
 
   const colorSetInsights = React.useMemo(() => getColorSetInsights(props), [props]);
   const dangerousZones = React.useMemo(() => getDangerousZones(props), [props]);
@@ -179,6 +189,8 @@ export default function App() {
   const aiActions = {
     pushState,
     advanceTurn: () => advanceTurn(gameState),
+    buildHouse: (spaceId, forAI) => buildHouse(spaceId, forAI),
+    buyProperty: (spaceId, forAI) => buyProperty(spaceId, forAI),
     doMoveAndAction: (...args) => doMoveAndAction(...args),
     handleRouletteSpin: () => handleRouletteSpin(),
     handleJailRoll: () => handleJailRoll(),
@@ -263,7 +275,7 @@ export default function App() {
     setTimeout(() => pushState((c) => ({ ...c, rolling: false })), 900);
   };
 
-  useAIController(gameState, myIdx, processing, aiActions);
+  useAIController(gameState, processing, isLocalGame || isHost, aiActions);
 
   // ── Derived State ──
   const latestLogEntry = gameState?.log?.[0] || "";
@@ -416,8 +428,14 @@ export default function App() {
     }).then(() => setProcessing(false));
   };
 
-  const buildHouse = (spaceId) => {
-    if (!isMyTurn || gameState.rolling) return;
+  const buildHouse = (spaceId, forAI = false) => {
+    const activePlayer = rawPlayers[gameState.currentPlayer];
+    if (
+      (forAI
+        ? !(isLocalGame || isHost) || !activePlayer?.isAI
+        : !isMyTurn) ||
+      gameState.rolling
+    ) return;
     pushState((gs) => {
       const cur = { ...gs };
       const props = { ...safeProps(cur) };
@@ -639,9 +657,15 @@ export default function App() {
     }, 5500);
   };
 
-  const buyProperty = (spaceId) => {
-    if (!isMyTurn || gameState.rolling) return;
-    const playerAtTurn = rawPlayers[myIdx];
+  const buyProperty = (spaceId, forAI = false) => {
+    const activePlayer = rawPlayers[gameState.currentPlayer];
+    if (
+      (forAI
+        ? !(isLocalGame || isHost) || !activePlayer?.isAI
+        : !isMyTurn) ||
+      gameState.rolling
+    ) return;
+    const playerAtTurn = forAI ? activePlayer : rawPlayers[myIdx];
     if (playerAtTurn?.position !== spaceId) return;
     setSelectedSpace(null);
     pushState((current) => {
@@ -766,8 +790,8 @@ export default function App() {
           handleSwap={handleSwap} 
           buildHouse={buildHouse} 
           handleRouletteSpin={handleRouletteSpin} 
-          eligibleStealTargets={[]} 
-          eligibleSwapMine={[]} 
+          eligibleStealTargets={eligibleStealTargets}
+          eligibleSwapMine={eligibleSwapMine}
         />
         <SidePanelView 
           me={rawPlayers[myIdx]} 

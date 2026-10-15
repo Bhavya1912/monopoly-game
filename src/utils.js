@@ -10,7 +10,7 @@ import {
 // General-purpose helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
+const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 
 /** Generate a 6-character uppercase room code. */
 export const generateCode = () =>
@@ -25,8 +25,6 @@ export const safePlayers = (gs) =>
 export const safeProps = (gs) =>
   gs?.properties && typeof gs.properties === "object" ? gs.properties : {};
 export const safeLog = (gs) => (Array.isArray(gs?.log) ? gs.log : []);
-export const safeDice = (gs) =>
-  Array.isArray(gs?.dice) && gs.dice.length === 2 ? gs.dice : [1, 1];
 export const safeSettings = (gs) => ({
   ...DEFAULT_SETTINGS,
   ...gs?.settings,
@@ -50,7 +48,7 @@ export function estimateAssetValueForPlayer(playerId, props) {
 }
 
 /** Estimated rent a property would currently charge. */
-export function estimatePropertyRent(spaceId, prop, props) {
+function estimatePropertyRent(spaceId, prop, props) {
   const space = SPACES[spaceId];
   if (!space || !prop) return 0;
 
@@ -99,7 +97,7 @@ export function marketGroupKey(space) {
 }
 
 /** True when a property belongs to a completed color set for its current owner. */
-export function isPropertyInCompleteSet(spaceId, props) {
+function isPropertyInCompleteSet(spaceId, props) {
   const prop = props?.[spaceId];
   if (!prop) return false;
   const space = SPACES[spaceId];

@@ -16,7 +16,7 @@ import {
   randomMarketModifiers,
 } from "../utils";
 
-export const ROULETTE_OUTCOMES = [
+const ROULETTE_OUTCOMES = [
   { label: "Reward $100", type: "reward", amount: 100 },
   { label: "Swap Property", type: "swap" },
   { label: "Reward $200", type: "reward", amount: 200 },
@@ -25,12 +25,12 @@ export const ROULETTE_OUTCOMES = [
   { label: "Better Luck Next Time", type: "none" },
 ];
 
-export const PROPERTY_ACTION_TYPES = ["property", "railroad", "utility"];
+const PROPERTY_ACTION_TYPES = ["property", "railroad", "utility"];
 
 /**
  * Calculates rent for a given space and property.
  */
-export const calcRent = (gs, spaceId, prop, dice) => {
+const calcRent = (gs, spaceId, prop, dice) => {
   const space = SPACES[spaceId];
   if (!space) return 0;
 
@@ -63,7 +63,7 @@ export const calcRent = (gs, spaceId, prop, dice) => {
 /**
  * Runs a round-end event.
  */
-export const runRoundEvent = (players, props, freePot, log) => {
+const runRoundEvent = (players, props, freePot, log) => {
   const evt = ROUND_EVENTS[Math.floor(Math.random() * ROUND_EVENTS.length)];
   const nextPlayers = players.map((p) => ({ ...p }));
   let nextFreePot = freePot || 0;

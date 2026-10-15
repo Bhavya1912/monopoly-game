@@ -1,9 +1,18 @@
 import { useEffect, useRef, useCallback } from "react";
-import { safePlayers } from "../utils";
-import { aiJailStrategy } from "../ai";
+import { safePlayers, safeProps } from "../utils";
+import { aiJailStrategy, aiShouldBuild, aiShouldBuy } from "../ai";
+import { SPACES } from "../constants";
 
-export function useAIController(gameState, myIdx, processing, aiActions) {
-  const { pushState, advanceTurn, handleRouletteSpin, handleJailRoll, handleRoll } = aiActions;
+export function useAIController(gameState, processing, canControlAI, aiActions) {
+  const {
+    pushState,
+    advanceTurn,
+    buildHouse,
+    buyProperty,
+    handleRouletteSpin,
+    handleJailRoll,
+    handleRoll,
+  } = aiActions;
   const aiTimerRef = useRef(null);
   const gsRef = useRef(gameState);
 
@@ -16,6 +25,17 @@ export function useAIController(gameState, myIdx, processing, aiActions) {
     if (gs?.status !== "playing" || gs?.modal) return;
 
     if (gs.rolled) {
+      const players = safePlayers(gs);
+      const cur = players[gs.currentPlayer];
+      const spaceId = cur?.position;
+      if (
+        cur?.isAI &&
+        canControlAI &&
+        aiShouldBuild(cur, spaceId, safeProps(gs))
+      ) {
+        buildHouse(spaceId, true);
+        return;
+      }
       setTimeout(() => advanceTurn(), 800);
       return;
     }
@@ -31,7 +51,7 @@ export function useAIController(gameState, myIdx, processing, aiActions) {
     }
 
     handleRoll();
-  }, [advanceTurn, handleJailRoll, handleRoll]);
+  }, [advanceTurn, buildHouse, canControlAI, handleJailRoll, handleRoll]);
 
   // AI Modal Handler
   useEffect(() => {
@@ -41,7 +61,7 @@ export function useAIController(gameState, myIdx, processing, aiActions) {
     const players = safePlayers(gameState);
     const curIdx = gameState.currentPlayer;
     const cur = players[curIdx];
-    if (!cur?.isAI || cur?.bankrupt) return;
+    if (!canControlAI || !cur?.isAI || cur?.bankrupt) return;
 
     clearTimeout(aiTimerRef.current);
     aiTimerRef.current = setTimeout(() => {
@@ -54,6 +74,16 @@ export function useAIController(gameState, myIdx, processing, aiActions) {
         return;
       }
 
+      if (modal.type === "buy") {
+        const spaceId = modal.spaceId;
+        if (aiShouldBuy(cur, SPACES[spaceId], safeProps(gs))) {
+          buyProperty(spaceId, true);
+        } else {
+          pushState((c) => ({ ...c, modal: null }));
+        }
+        return;
+      }
+
       if (modal.type === "steal" || modal.type === "swap") {
         pushState((c) => ({ ...c, modal: null }));
         return;
@@ -62,7 +92,7 @@ export function useAIController(gameState, myIdx, processing, aiActions) {
       pushState((c) => ({ ...c, modal: null }));
     }, 700);
     return () => clearTimeout(aiTimerRef.current);
-  }, [gameState?.modal, gameState?.currentPlayer, gameState?.status, processing, pushState, handleRouletteSpin, gameState]);
+  }, [gameState?.modal, gameState?.currentPlayer, gameState?.status, processing, canControlAI, pushState, handleRouletteSpin, buyProperty, gameState]);
 
   // AI Turn Handler
   useEffect(() => {
@@ -70,7 +100,7 @@ export function useAIController(gameState, myIdx, processing, aiActions) {
     if (gameState?.modal) return;
 
     const cur = safePlayers(gameState)[gameState?.currentPlayer];
-    if (!cur?.isAI || cur?.bankrupt) return;
+    if (!canControlAI || !cur?.isAI || cur?.bankrupt) return;
     if (processing) return;
 
     clearTimeout(aiTimerRef.current);
@@ -78,7 +108,7 @@ export function useAIController(gameState, myIdx, processing, aiActions) {
       runAITurnLogic();
     }, 1200);
     return () => clearTimeout(aiTimerRef.current);
-  }, [gameState?.currentPlayer, gameState?.rolled, gameState?.status, gameState?.modal, processing, runAITurnLogic, gameState]);
+  }, [gameState?.currentPlayer, gameState?.rolled, gameState?.status, gameState?.modal, processing, canControlAI, runAITurnLogic, gameState]);
 
   return {};
 }

@@ -4,7 +4,7 @@ import { SPACES, COLOR_GROUPS } from "./constants";
 // AI difficulty profiles
 // Each number is a 0–1 weight controlling AI behaviour
 // ─────────────────────────────────────────────────────────────────────────────
-export const AI_DIFFICULTY = {
+const AI_DIFFICULTY = {
     easy: {
         buyThreshold: 0.45,
         buildThreshold: 0.3,
@@ -38,7 +38,7 @@ export const AI_DIFFICULTY = {
 // ─────────────────────────────────────────────────────────────────────────────
 // AI personality modifiers layered on top of difficulty
 // ─────────────────────────────────────────────────────────────────────────────
-export const AI_PERSONALITY = {
+const AI_PERSONALITY = {
     aggressive: { buyMod: +0.2, buildMod: +0.25, cashMod: -0.15 },
     conservative: { buyMod: -0.2, buildMod: -0.2, cashMod: +0.25 },
     monopolist: {
@@ -103,6 +103,15 @@ export function aiShouldBuild(player, spaceId, props) {
     if (!space?.houseCost) return false;
     const prop = props[spaceId];
     if (!prop || prop.hotel) return false;
+    const group = COLOR_GROUPS[space.color] || [];
+    if (!group.length || !group.every((id) => props[id]?.owner === player.id)) return false;
+    if (group.some((id) => props[id]?.mortgaged)) return false;
+
+    const levels = group.map((id) =>
+        props[id]?.hotel ? 5 : (props[id]?.houses || 0),
+    );
+    const currentLevel = prop.hotel ? 5 : (prop.houses || 0);
+    if (currentLevel >= 5 || currentLevel > Math.min(...levels)) return false;
 
     const cfg = player.aiConfig || {
         difficulty: "medium",
@@ -120,23 +129,6 @@ export function aiShouldBuild(player, spaceId, props) {
     score += (prop.houses || 0) * 0.08;
 
     return Math.random() < score;
-}
-
-/** Pick which property the AI should sell to raise cash. */
-export function aiPickPropertyToSell(player, props) {
-    const owned = Object.entries(props)
-        .filter(([, p]) => p && p.owner === player.id)
-        .map(([id]) => +id);
-
-    // Prefer to sell properties that don't break a monopoly
-    const nonMono = owned.filter((id) => {
-        const group = COLOR_GROUPS[SPACES[id]?.color] || [];
-        return !group.every((gid) => props[gid]?.owner === player.id);
-    });
-
-    const pool = nonMono.length > 0 ? nonMono : owned;
-    pool.sort((a, b) => (SPACES[a]?.price || 0) - (SPACES[b]?.price || 0));
-    return pool[0] ?? null;
 }
 
 /** Decide whether the AI should pay the jail fine, roll for doubles, or use a card. */
